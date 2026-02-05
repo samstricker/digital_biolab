@@ -1,0 +1,22 @@
+{
+    "name": "celltype_1_alpha",
+    "mu_max": 0.0451639932,
+    "k_lysis": 0.0446990515,
+    "k_deg_gln": 0.0013441722,
+    "k_death_max": 0.0101556537,
+    "k_death_mu": 0.0145125692,
+    "k_sat_lac": 141.4574131165,
+    "k_sat_ammonia": 37.778062819,
+    "k_sat_glc": 1.1634941712,
+    "k_sat_gln": 0.2123961928,
+    "y_ammonia": 9.98e-08,
+    "y_lactate": 0.8061528449,
+    "y_cells_glc": 153303245.24868935,
+    "y_cells_gln": 8363679425.5848055,
+    "m_glc": 4e-10,
+    "m_gln": 0.0,
+    "c_ammonia": 3.7863148646,
+    "ph_opt": 6.6322667638,
+    "e_activation": 33.4625042393,
+    "scale_factor_a": 1.2
+}
