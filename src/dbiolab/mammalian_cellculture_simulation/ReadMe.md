@@ -69,7 +69,7 @@ $$\frac{dx_{dead}}{dt} = k_{death} \cdot x_{viable} - k_{lysis} \cdot x_{dead}$$
 ## Metabolite Dynamics
 
 ### Product Formation
-$$\frac{dc_{product}}{dt} = \left(x_{total} \cdot y_{product,total} + x_{viable} \cdot y_{product,viable} \cdot \mu\right) \cdot f_{pH} \cdot f_{temp}$$
+$$\frac{dc_{product}}{dt} = \left(x_{total} \cdot y_{product,total} + x_{viable} \cdot y_{product,viable} \cdot \mu\right) \cdot f_{pH, product} \cdot f_{temp, product}$$
 
 ### Glucose Consumption
 $$\frac{dc_{glc}}{dt} = x_{viable} \cdot \left(-\frac{\mu}{y_{cells,glc}} - m_{glc}\right)$$
@@ -84,12 +84,20 @@ $$\frac{dc_{lac}}{dt} = -y_{lactate} \cdot \frac{dc_{glc}}{dt}$$
 $$\frac{dc_{ammonia}}{dt} = -y_{ammonia} \cdot x_{viable} \cdot \left(-\frac{\mu}{y_{cells,gln}} - m_{gln}\right) + k_{deg,gln} \cdot c_{gln}$$
 
 ## Parameters
-- $\mu_{max}$: Maximum specific growth rate
-- $k_{sat,*}$: Monod saturation constants for each metabolite
-- $y_{*}$: Yield coefficients
-- $m_{*}$: Maintenance coefficients
-- $k_{death,max}$, $k_{death,\mu}$: Death rate parameters
-- $k_{lysis}$: Cell lysis rate
-- $k_{deg,gln}$: Glutamine degradation rate
-- $s_{scale}$: Reactor scale factor
-- $g_{inhibition}$: Growth inhibition exponent
+- $\mu_{max}$: Maximum specific growth rate [`mu_max`]
+- $k_{sat,glc}$, $k_{sat,gln}$, $k_{sat,lac}$, $k_{sat,ammonia}$: Monod saturation constants [`k_sat_glc`, `k_sat_gln`, `k_sat_lac`, `k_sat_ammonia`]
+- $y_{cells,glc}$, $y_{cells,gln}$: Cell yield coefficients [`y_cells_glc`, `y_cells_gln`]
+- $y_{product,total}$, $y_{product,viable}$: Product yield coefficients [`y_product_from_total`, `y_product_from_viable`]
+- $y_{lactate}$, $y_{ammonia}$: Byproduct yield coefficients [`y_lactate`, `y_ammonia`]
+- $m_{glc}$, $m_{gln}$: Maintenance coefficients [`m_glc`, `m_gln`]
+- $k_{death,max}$, $k_{death,\mu}$: Death rate parameters [`k_death_max`, `k_death_mu`]
+- $k_{lysis}$: Cell lysis rate [`k_lysis`]
+- $k_{deg,gln}$: Glutamine degradation rate [`k_deg_gln`]
+- $s_{scale}$: Reactor scale factor [`scale_factor`]
+- $g_{inhibition}$: Growth inhibition exponent [`growth_inhibition`]
+- $T_{opt}$: Optimal temperature for growth [`e_activation`]
+- $r_{temp}$: Temperature robustness factor [`temperature_robustness_factor`]
+- $pH_{opt}$: Optimal pH for growth [`ph_opt`]
+- $r_{pH}$: pH robustness factor [`ph_robustness_factor`]
+- $T_{opt,product}$, $r_{temp,product}$: Product formation temperature parameters [`temperature_opt_product`, `temperature_opt_product_robustness`]
+- $pH_{opt,product}$, $r_{pH,product}$: Product formation pH parameters [`ph_opt_product`, `ph_opt_product_robustness`]
