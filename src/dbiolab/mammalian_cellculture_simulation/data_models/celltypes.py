@@ -63,6 +63,10 @@ class CellType:
         Product yield from total cells [-].
     y_product_from_viable : float
         Product yield from viable cells [-].
+    hcp_per_cell : float
+        Host cell protein (HCP) amount per cell [mM/cells mL^-1].
+    k_agg_product : float
+        Product aggregation rate constant [mM^-1 h^-1].
 
     Notes
     -----
@@ -98,6 +102,8 @@ class CellType:
     temperature_opt_product_robustness: float
     y_product_from_total: float
     y_product_from_viable: float
+    hcp_per_cell: float
+    k_agg_product: float
 
     @staticmethod
     def from_json(data_path: str) -> "CellType":

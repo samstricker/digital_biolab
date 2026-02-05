@@ -15,10 +15,12 @@ def plot_reaction_evolution_timeseries(
     cell_density_figure = get_cell_density_figure(data)
     metabolite_concentration_figure = get_metabolite_concentration_figure(data)
     product_concentration_figure = get_product_concentration_figure(data)
+    purity_figure = get_purity_figure(data)
     return [
         cell_density_figure,
         metabolite_concentration_figure,
         product_concentration_figure,
+        purity_figure,
     ]
 
 
@@ -104,6 +106,13 @@ def get_product_concentration_figure(data: ReactionEvolutionTimeseries):
         trace_name="Product Concentration",
         color="green",
     )
+    plot_figure = add_timeseries_trace(
+        figure=product_figure,
+        x_data=data.timepoints,
+        y_data=data.c_aggregates,
+        trace_name="Product Aggregates Concentration",
+        color="red",
+    )
     plot_figure.update_layout(
         title="Product Concentration Evolution Over Time",
         xaxis_title="Time (hours)",
@@ -131,3 +140,22 @@ def add_timeseries_trace(
         )
     )
     return figure
+
+
+def get_purity_figure(data: ReactionEvolutionTimeseries):
+    purity_figure = go.Figure()
+    plot_figure = add_timeseries_trace(
+        figure=purity_figure,
+        x_data=data.timepoints,
+        y_data=data.purity,
+        trace_name="Product Purity",
+        color="magenta",
+    )
+    plot_figure.update_layout(
+        title="Product Purity Evolution Over Time",
+        xaxis_title="Time (hours)",
+        yaxis_title="Purity (fraction)",
+        width=800,
+        height=500,
+    )
+    return purity_figure

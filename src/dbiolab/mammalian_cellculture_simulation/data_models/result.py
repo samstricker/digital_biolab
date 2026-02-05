@@ -33,6 +33,10 @@ class ReactionEvolutionTimeseries:
         Initial lactate concentration [mM].
     c_ammonia : NDArray[np.float64]
         Initial ammonia concentration [mM].
+    c_aggregates : NDArray[np.float64]
+        Product aggregates concentration [mM].
+    purity : NDArray[np.float64]
+        Product purity (fraction of total protein-like substances) [-].
     """
 
     name: str
@@ -45,6 +49,8 @@ class ReactionEvolutionTimeseries:
     c_gln: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     c_lac: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     c_ammonia: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    c_aggregates: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    purity: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
 
     def extend(self, other: "ReactionEvolutionTimeseries"):
         """Extend the current timeseries with another timeseries.
@@ -63,6 +69,8 @@ class ReactionEvolutionTimeseries:
         self.c_gln = np.concatenate((self.c_gln, other.c_gln))
         self.c_lac = np.concatenate((self.c_lac, other.c_lac))
         self.c_ammonia = np.concatenate((self.c_ammonia, other.c_ammonia))
+        self.c_aggregates = np.concatenate((self.c_aggregates, other.c_aggregates))
+        self.purity = np.concatenate((self.purity, other.purity))
 
     def to_dict(self) -> Dict:
         """Return the timeseries as a dictionary.
@@ -83,6 +91,8 @@ class ReactionEvolutionTimeseries:
             "c_gln": self.c_gln.tolist(),
             "c_lac": self.c_lac.tolist(),
             "c_ammonia": self.c_ammonia.tolist(),
+            "c_aggregates": self.c_aggregates.tolist(),
+            "purity": self.purity.tolist(),
         }
 
     @staticmethod

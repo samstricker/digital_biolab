@@ -1,6 +1,6 @@
 # Local files
 .local-data/*
-.local/*
+**/.local/*
 **/__pycache__/**
 src/dbiolab/mammalian_cellculture_simulation/celltypes/*
 src/dbiolab/mammalian_cellculture_simulation/reactor_types/*

@@ -26,6 +26,8 @@ class FeedConcentrations:
         Initial lactate concentration [mM].
     c_ammonia : float
         Initial ammonia concentration [mM].
+    c_aggregates : float
+        Product aggregates concentration [mM].
     """
 
     c_product: float
@@ -36,6 +38,7 @@ class FeedConcentrations:
     c_gln: float
     c_lac: float
     c_ammonia: float
+    c_aggregates: float
 
     @staticmethod
     def from_json(data_path: str) -> "FeedConcentrations":
@@ -103,6 +106,7 @@ class FeedConcentrations:
             "c_gln": self.c_gln,
             "c_lac": self.c_lac,
             "c_ammonia": self.c_ammonia,
+            "c_aggregates": self.c_aggregates,
         }
 
     def as_list(self) -> List[float]:
@@ -112,7 +116,7 @@ class FeedConcentrations:
         -------
         List[float]
             The initial conditions as a list of floats.
-            Format: [c_product, x_total, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia]
+            Format: [c_product, x_total, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia, c_aggregates]
         """
         return [
             self.c_product,
@@ -123,6 +127,7 @@ class FeedConcentrations:
             self.c_gln,
             self.c_lac,
             self.c_ammonia,
+            self.c_aggregates,
         ]
 
 

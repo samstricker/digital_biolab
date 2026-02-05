@@ -68,8 +68,11 @@ $$\frac{dx_{dead}}{dt} = k_{death} \cdot x_{viable} - k_{lysis} \cdot x_{dead}$$
 
 ## Metabolite Dynamics
 
-### Product Formation
-$$\frac{dc_{product}}{dt} = \left(x_{total} \cdot y_{product,total} + x_{viable} \cdot y_{product,viable} \cdot \mu\right) \cdot f_{pH, product} \cdot f_{temp, product}$$
+### Product Formation and Aggregation
+$$\frac{dc_{product}}{dt} = \left(x_{total} \cdot y_{product,total} + x_{viable} \cdot y_{product,viable} \cdot \mu\right) \cdot f_{pH, product} \cdot f_{temp, product} - k_{agg} \cdot c_{product}^2$$
+
+### Product Aggregation
+$$\frac{dc_{aggregates}}{dt} = k_{agg} \cdot c_{product}^2$$
 
 ### Glucose Consumption
 $$\frac{dc_{glc}}{dt} = x_{viable} \cdot \left(-\frac{\mu}{y_{cells,glc}} - m_{glc}\right)$$
@@ -83,7 +86,26 @@ $$\frac{dc_{lac}}{dt} = -y_{lactate} \cdot \frac{dc_{glc}}{dt}$$
 ### Ammonia Production
 $$\frac{dc_{ammonia}}{dt} = -y_{ammonia} \cdot x_{viable} \cdot \left(-\frac{\mu}{y_{cells,gln}} - m_{gln}\right) + k_{deg,gln} \cdot c_{gln}$$
 
+### Product Aggregation
+$$\frac{dc_{aggregates}}{dt} = k_{agg} \cdot \left(\frac{dc_{product}}{dt}\right)^2$$
+
+### Product Purity
+
+Product purity is calculated as the ratio of active product to all protein-like and non-specific substances present in the culture:
+
+$$\text{purity} = \frac{c_{product}}{c_{product} + c_{aggregates} + c_{HCP} + c_{glc} + c_{gln} + c_{lac} + c_{ammonia}}$$
+
+where $c_{HCP}$ is calculated as:
+$$c_{HCP} = x_{dead} \cdot k_{lysis} \cdot hcp_{per\_cell}$$
+
 ## Parameters
+- $c_{product}$: Active product concentration
+- $c_{aggregates}$: Product aggregate concentration
+- $c_{HCP}$: Host cell protein released from cell lysis
+- $c_{glc}$: Glucose concentration
+- $c_{gln}$: Glutamine concentration
+- $c_{lac}$: Lactate concentration
+- $c_{ammonia}$: Ammonia concentration
 - $\mu_{max}$: Maximum specific growth rate [`mu_max`]
 - $k_{sat,glc}$, $k_{sat,gln}$, $k_{sat,lac}$, $k_{sat,ammonia}$: Monod saturation constants [`k_sat_glc`, `k_sat_gln`, `k_sat_lac`, `k_sat_ammonia`]
 - $y_{cells,glc}$, $y_{cells,gln}$: Cell yield coefficients [`y_cells_glc`, `y_cells_gln`]
@@ -93,6 +115,8 @@ $$\frac{dc_{ammonia}}{dt} = -y_{ammonia} \cdot x_{viable} \cdot \left(-\frac{\mu
 - $k_{death,max}$, $k_{death,\mu}$: Death rate parameters [`k_death_max`, `k_death_mu`]
 - $k_{lysis}$: Cell lysis rate [`k_lysis`]
 - $k_{deg,gln}$: Glutamine degradation rate [`k_deg_gln`]
+- $k_{agg}$: Product aggregation rate constant [`k_agg_product`]
+- $hcp_{per\_cell}$: HCP amount per cell [`hcp_per_cell`]
 - $s_{scale}$: Reactor scale factor [`scale_factor`]
 - $g_{inhibition}$: Growth inhibition exponent [`growth_inhibition`]
 - $T_{opt}$: Optimal temperature for growth [`e_activation`]

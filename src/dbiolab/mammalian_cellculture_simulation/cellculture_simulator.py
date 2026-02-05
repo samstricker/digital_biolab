@@ -102,6 +102,7 @@ class MammalianCellcultureReactor:
             args=(recipe,),
         )
         current_time = end_time
+        purity = self._calculate_purity(solution, recipe)
         partial_solution = ReactionEvolutionTimeseries(
             name=recipe.name,
             timepoints=solution.t,
@@ -113,6 +114,8 @@ class MammalianCellcultureReactor:
             c_gln=solution.y[5],
             c_lac=solution.y[6],
             c_ammonia=solution.y[7],
+            c_aggregates=solution.y[8],
+            purity=purity,
         )
         return partial_solution, current_time
 
@@ -132,12 +135,13 @@ class MammalianCellcultureReactor:
             partial_solution.c_lac[-1] + feeding_event.feed_concentrations.c_lac,
             partial_solution.c_ammonia[-1]
             + feeding_event.feed_concentrations.c_ammonia,
+            partial_solution.c_aggregates[-1],  # Aggregates not fed
         ]
         return final_conditions
 
     def _ode_system(self, t, x, recipe: MammalianRecipe):
         # x_* here is the cell density and c_* the concentrations of the metabolites
-        _, x_total, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia = x
+        _, x_total, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia, c_aggregates = x
         current_grwth_rate = self._calculate_growth_rate(
             c_glc, c_gln, c_lac, c_ammonia, recipe
         )
@@ -170,7 +174,8 @@ class MammalianCellcultureReactor:
             recipe.celltype.temperature_opt_product,
             recipe.celltype.temperature_opt_product_robustness,
         )
-        product_gradient = (
+        # Product formation from cells
+        product_formation = (
             (
                 (x_total * recipe.celltype.y_product_from_total)
                 + (
@@ -182,6 +187,9 @@ class MammalianCellcultureReactor:
             * ph_penalty
             * temperature_penalty
         )
+
+        product_aggregation = recipe.celltype.k_agg_product * (product_formation**2)
+        product_gradient = product_formation - product_aggregation
 
         c_glc_gradient = x_viable * (
             (-current_grwth_rate / recipe.celltype.y_cells_glc) - recipe.celltype.m_glc
@@ -204,6 +212,7 @@ class MammalianCellcultureReactor:
             c_gln_gradient,
             c_lac_gradient,
             c_ammonia_gradient,
+            product_aggregation,
         ]
 
     def _calculate_growth_rate(
@@ -295,3 +304,36 @@ class MammalianCellcultureReactor:
             factor, 0.2, None
         )  # pH effect can not zero out growth completely
         return float(factor)
+
+    def _calculate_purity(self, solution, recipe: MammalianRecipe) -> np.ndarray:
+        """Calculate product purity from solution trajectory.
+
+        Parameters
+        ----------
+        solution : scipy.integrate.OdeResult
+            The ODE solution from solve_ivp.
+        recipe : MammalianRecipe
+            The recipe with cell type parameters.
+
+        Returns
+        -------
+        np.ndarray
+            Product purity at each timepoint, clipped to [0, 1].
+        """
+        c_product = solution.y[0]
+        c_aggregates = solution.y[8]
+        x_dead = solution.y[3]
+        c_hcp = x_dead * recipe.celltype.k_lysis * recipe.celltype.hcp_per_cell
+        total_protein_like = (
+            c_product
+            + c_aggregates
+            + c_hcp
+            + solution.y[4]
+            + solution.y[5]
+            + solution.y[6]
+            + solution.y[7]
+        )
+        purity = c_product / (total_protein_like + 1e-9)
+        purity = np.clip(purity, 0, 1)
+
+        return purity
