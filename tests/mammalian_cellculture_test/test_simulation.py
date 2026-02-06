@@ -12,13 +12,21 @@ from dbiolab.mammalian_cellculture_simulation import (
 
 
 def test_mammalian_simulation():
-    reactor = ReactorType.from_json("tests/resources/MTP_1.json")
-    celltype = CellType.from_json("tests/resources/celltype_1_alpha.json")
-    feed_event = FeedingEvent.from_json("tests/resources/feed_event.json")
-    initial_conditions = FeedConcentrations.from_json(
-        "tests/resources/initial_conditions.json"
+    reactor = ReactorType.from_json(
+        "tests/mammalian_cellculture_test/resources/MTP_1.json"
     )
-    noise_parameters = NoiseParameters.from_json("tests/resources/noise_levels.json")
+    celltype = CellType.from_json(
+        "tests/mammalian_cellculture_test/resources/celltype_1_alpha.json"
+    )
+    feed_event = FeedingEvent.from_json(
+        "tests/mammalian_cellculture_test/resources/feed_event.json"
+    )
+    initial_conditions = FeedConcentrations.from_json(
+        "tests/mammalian_cellculture_test/resources/initial_conditions.json"
+    )
+    noise_parameters = NoiseParameters.from_json(
+        "tests/mammalian_cellculture_test/resources/noise_levels.json"
+    )
     simulator = MammalianCellcultureReactor(reactor_type=reactor)
     feeding_strategy = [feed_event]
     recipe = MammalianRecipe(

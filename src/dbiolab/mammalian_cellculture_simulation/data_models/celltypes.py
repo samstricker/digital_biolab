@@ -45,20 +45,12 @@ class CellType:
         Maintenance coefficient for glutamine [mmol cell^-1 h^-1].
     ph_opt : float
         Optimal pH.
-    ph_opt_product : float
-        Optimal pH for product formation.
-    ph_opt_product_robustness : float
-        Robustness of optimal pH for product formation.
-    e_activation : float
-        Enzyme activation energy.
-    temperature_opt_product : float
-        Optimal temperature for product formation in Celsius.
-    temperature_robustness_factor : float
-        Temperature robustness factor.
-    temperature_opt_product_robustness : float
-        Robustness of optimal temperature for product formation.
     ph_robustness_factor : float
         pH robustness factor.
+    e_activation : float
+        Enzyme activation energy.
+    temperature_robustness_factor : float
+        Temperature robustness factor.
     y_product_from_total : float
         Product yield from total cells [-].
     y_product_from_viable : float
@@ -93,13 +85,9 @@ class CellType:
     m_glc: float
     m_gln: float
     ph_opt: float
-    ph_opt_product: float
-    ph_opt_product_robustness: float
     ph_robustness_factor: float
     e_activation: float
-    temperature_opt_product: float
     temperature_robustness_factor: float
-    temperature_opt_product_robustness: float
     y_product_from_total: float
     y_product_from_viable: float
     hcp_per_cell: float

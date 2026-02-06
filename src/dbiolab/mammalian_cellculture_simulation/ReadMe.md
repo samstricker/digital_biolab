@@ -53,7 +53,7 @@ $$f_{temp} = r_{temp} \cdot \begin{cases}
 \exp\left(-1.0 \cdot \left(\frac{T - T_{opt}}{8.0}\right)^2\right) & \text{if } T \geq T_{opt}
 \end{cases}$$
 
-where $T_{opt}$ is the optimal temperature and $r_{temp}$ is the temperature robustness factor. The factor is clipped to a minimum of 0.2.
+where $T_{opt}$ is the optimal temperature (e_activation) and $r_{temp}$ is the temperature robustness factor. The factor is clipped to a minimum of 0.2.
 
 #### pH Effect
 The pH penalty factor similarly uses asymmetric Gaussian functions:
@@ -92,7 +92,7 @@ $$\frac{dx_{dead}}{dt} = k_{death} \cdot x_{viable} - k_{lysis} \cdot x_{dead}$$
 ### Metabolite Dynamics
 
 #### Product Formation and Aggregation
-$$\frac{dc_{product}}{dt} = \left(x_{total} \cdot y_{product,total} + x_{viable} \cdot y_{product,viable} \cdot \mu\right) \cdot f_{pH, product} \cdot f_{temp, product} - k_{agg} \cdot c_{product}^2$$
+$$\frac{dc_{product}}{dt} = \left(x_{total} \cdot y_{product,total} + x_{viable} \cdot y_{product,viable} \cdot \mu\right) - k_{agg} \cdot c_{product}^2$$
 
 #### Product Aggregation
 $$\frac{dc_{aggregates}}{dt} = k_{agg} \cdot \left(\frac{dc_{product}}{dt}\right)^2$$
@@ -143,8 +143,6 @@ $$c_{HCP} = x_{dead} \cdot k_{lysis} \cdot hcp_{per\_cell}$$
 - $r_{temp}$: Temperature robustness factor [`temperature_robustness_factor`]
 - $pH_{opt}$: Optimal pH for growth [`ph_opt`]
 - $r_{pH}$: pH robustness factor [`ph_robustness_factor`]
-- $T_{opt,product}$, $r_{temp,product}$: Product formation temperature parameters [`temperature_opt_product`, `temperature_opt_product_robustness`]
-- $pH_{opt,product}$, $r_{pH,product}$: Product formation pH parameters [`ph_opt_product`, `ph_opt_product_robustness`]
 
 ### Noise in Simulations
 There are two types of noise that can be added to the simulations to create more realistic and variable outcomes, mimicking the inherent stochasticity in biological systems and measurement processes.

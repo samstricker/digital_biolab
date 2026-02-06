@@ -29,7 +29,7 @@ class MammalianCellcultureReactor:
         self.seed: Optional[int] = None
 
     def run_experiment(
-        self, recipe: MammalianRecipe, seed: int = None
+        self, recipe: MammalianRecipe, seed: Optional[int] = None
     ) -> ReactionEvolutionTimeseries:
         """Run a cell culture simulation based on the provided recipe.
 
@@ -146,56 +146,35 @@ class MammalianCellcultureReactor:
     def _ode_system(self, _, x, recipe: MammalianRecipe):
         # x_* here is the cell density and c_* the concentrations of the metabolites
         _, x_total, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia, _ = x
-        current_grwth_rate = self._calculate_growth_rate(
+        current_growth_rate = self._calculate_growth_rate(
             c_glc, c_gln, c_lac, c_ammonia, recipe
         )
-        # TODO: Maybe subfunctions?
         k_death = (
             recipe.celltype.k_death_max
             * (
                 recipe.celltype.k_death_mu
-                / (current_grwth_rate + recipe.celltype.k_death_mu)
+                / (current_growth_rate + recipe.celltype.k_death_mu)
             )
             * self.reactor_type.scale_factor
         )
-        x_total_gradient = (current_grwth_rate * x_viable) - (
+        x_total_gradient = (current_growth_rate * x_viable) - (
             recipe.celltype.k_lysis * x_dead
         )
-        x_viable_gradient = (current_grwth_rate - k_death) * x_viable
+        x_viable_gradient = (current_growth_rate - k_death) * x_viable
         x_dead_gradient = (k_death * x_viable) - (recipe.celltype.k_lysis * x_dead)
 
-        ph_penalty = self._calculate_ph_effect(
-            recipe.ph_value,
-            recipe.celltype.ph_opt_product,
-            recipe.celltype.ph_opt_product_robustness,
-        )
-        temperature_penalty = self._calculate_temperature_effect(
-            recipe.temperature,
-            recipe.celltype.temperature_opt_product,
-            recipe.celltype.temperature_opt_product_robustness,
-        )
         # Product formation from cells
-        product_formation = (
-            (
-                (x_total * recipe.celltype.y_product_from_total)
-                + (
-                    recipe.celltype.y_product_from_viable
-                    * x_viable
-                    * current_grwth_rate
-                )
-            )
-            * ph_penalty
-            * temperature_penalty
+        product_formation = (x_total * recipe.celltype.y_product_from_total) + (
+            recipe.celltype.y_product_from_viable * x_viable * current_growth_rate
         )
-
         product_aggregation = recipe.celltype.k_agg_product * (product_formation**2)
         product_gradient = product_formation - product_aggregation
 
         c_glc_gradient = x_viable * (
-            (-current_grwth_rate / recipe.celltype.y_cells_glc) - recipe.celltype.m_glc
+            (-current_growth_rate / recipe.celltype.y_cells_glc) - recipe.celltype.m_glc
         )
         c_gln_gradient_no_degrad = x_viable * (
-            (-current_grwth_rate / recipe.celltype.y_cells_gln) - recipe.celltype.m_gln
+            (-current_growth_rate / recipe.celltype.y_cells_gln) - recipe.celltype.m_gln
         )
         c_gln_degrad = recipe.celltype.k_deg_gln * c_gln
         c_gln_gradient = c_gln_gradient_no_degrad - c_gln_degrad
@@ -472,7 +451,8 @@ class MammalianCellcultureReactor:
             Cumulative Brownian motion increments.
         """
         rng = np.random.default_rng(seed=self.seed)
-        self.seed += 1  # ensure different noise each time
+        if self.seed is not None:
+            self.seed += 1  # ensure different noise each time
         increments = rng.normal(0, noise_std, n_steps) * np.sqrt(dt_array)
         return np.cumsum(increments)
 
@@ -495,7 +475,8 @@ class MammalianCellcultureReactor:
             Gaussian white noise array.
         """
         rng = np.random.default_rng(seed=self.seed)
-        self.seed += 1  # ensure different noise each time
+        if self.seed is not None:
+            self.seed += 1  # ensure different noise each time
         return rng.normal(0, noise_std, n_points)
 
     def _clip_to_physical_bounds(
