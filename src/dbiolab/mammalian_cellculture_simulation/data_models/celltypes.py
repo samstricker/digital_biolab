@@ -71,9 +71,9 @@ class CellType:
     Notes
     -----
     Based on publication:
-    Stephen Craven, Nishikant Shirsat, Jessica Whelan, and Brian Glennon. Process model comparison and transfer-
-    ability across bioreactor scales and modes of operation for a mammalian cell bioprocess. Biotechnology Progress,
-    29(1):186–196, 2013.
+    Stephen Craven, Nishikant Shirsat, Jessica Whelan, and Brian Glennon. Process model
+    comparison and transferability across bioreactor scales and modes of operation
+    for a mammalian cell bioprocess. Biotechnology Progress, 29(1):186–196, 2013.
     """
 
     name: str

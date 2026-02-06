@@ -1,47 +1,36 @@
 """Tests for mammalian cell culture simulation module."""
 
-import json
-from pathlib import Path
-
 from dbiolab.mammalian_cellculture_simulation import (
     CellType,
     FeedConcentrations,
     MammalianCellcultureReactor,
     MammalianRecipe,
     ReactorType,
+    FeedingEvent,
+    NoiseParameters,
 )
 
 
 def test_mammalian_simulation():
-    celltype_path = Path("tests/resources/celltype_1_alpha.json")
-    reactor_path = Path("tests/resources/MTP_1.json")
-
-    reactor = ReactorType.from_dict(
-        json.loads(reactor_path.read_text(encoding="utf-8"))
+    reactor = ReactorType.from_json("tests/resources/MTP_1.json")
+    celltype = CellType.from_json("tests/resources/celltype_1_alpha.json")
+    feed_event = FeedingEvent.from_json("tests/resources/feed_event.json")
+    initial_conditions = FeedConcentrations.from_json(
+        "tests/resources/initial_conditions.json"
     )
+    noise_parameters = NoiseParameters.from_json("tests/resources/noise_levels.json")
     simulator = MammalianCellcultureReactor(reactor_type=reactor)
-
-    celltype = CellType.from_dict(json.loads(celltype_path.read_text(encoding="utf-8")))
-    initial_conditions = FeedConcentrations(
-        p=0.0,
-        x_total=0.4 * 1e9,
-        x_viable=0.4 * 1e6,
-        x_dead=0.0,
-        c_glc=10.0,
-        c_gln=20.0,
-        c_lac=0.0,
-        c_ammonia=1.8,
-    )
-    feeding_strategy = []
+    feeding_strategy = [feed_event]
     recipe = MammalianRecipe(
+        name="test_recipe",
         celltype=celltype,
         temperature=37.0,
-        ph_value=7.4,
+        ph_value=6.6,
         initial_conditions=initial_conditions,
         feeding_strategy=feeding_strategy,
-        runtime=320.0,
+        runtime=1000.0,
         measurement_intervals=2.0,
+        noise_parameters=noise_parameters,
     )
-
     solution = simulator.run_experiment(recipe=recipe)
     assert solution is not None

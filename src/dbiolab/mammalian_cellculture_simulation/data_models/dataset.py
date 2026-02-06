@@ -1,3 +1,5 @@
+"""Module for defining the MammalianDataset dataclass and related methods."""
+
 from dataclasses import dataclass
 import json
 from pathlib import Path

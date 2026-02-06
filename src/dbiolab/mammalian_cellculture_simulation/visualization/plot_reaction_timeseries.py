@@ -12,6 +12,16 @@ from dbiolab.mammalian_cellculture_simulation import ReactionEvolutionTimeseries
 def plot_reaction_evolution_timeseries(
     data: ReactionEvolutionTimeseries,
 ) -> List[go.Figure]:
+    """Plot the reaction evolution timeseries data.
+    Parameters
+    ----------
+    data : ReactionEvolutionTimeseries
+        The dataclass containing the reaction evolution timeseries data.
+    Returns
+    -------
+    List[go.Figure]
+        A list of Plotly figures for the reaction evolution timeseries data.
+    """
     cell_density_figure = get_cell_density_figure(data)
     metabolite_concentration_figure = get_metabolite_concentration_figure(data)
     product_concentration_figure = get_product_concentration_figure(data)
@@ -25,6 +35,13 @@ def plot_reaction_evolution_timeseries(
 
 
 def get_cell_density_figure(data: ReactionEvolutionTimeseries):
+    """Plot the cell density evolution over time.
+
+    Parameters
+    ----------
+    data : ReactionEvolutionTimeseries
+        The dataclass containing the reaction evolution timeseries data.
+    """
     cell_density_figure = go.Figure()
     plot_figure = add_timeseries_trace(
         figure=cell_density_figure,
@@ -58,6 +75,16 @@ def get_cell_density_figure(data: ReactionEvolutionTimeseries):
 
 
 def get_metabolite_concentration_figure(data: ReactionEvolutionTimeseries):
+    """Plot the metabolite concentration evolution over time.
+    Parameters
+    ----------
+    data : ReactionEvolutionTimeseries
+        The dataclass containing the reaction evolution timeseries data.
+    Returns
+    -------
+    go.Figure
+        A Plotly figure for the metabolite concentration evolution over time.
+    """
     metabolite_figure = go.Figure()
     plot_figure = add_timeseries_trace(
         figure=metabolite_figure,
@@ -98,6 +125,18 @@ def get_metabolite_concentration_figure(data: ReactionEvolutionTimeseries):
 
 
 def get_product_concentration_figure(data: ReactionEvolutionTimeseries):
+    """Plot the product concentration evolution over time.
+
+    Parameters
+    ----------
+    data : ReactionEvolutionTimeseries
+        The dataclass containing the reaction evolution timeseries data.
+
+    Returns
+    -------
+    go.Figure
+        A Plotly figure for the product concentration evolution over time.
+    """
     product_figure = go.Figure()
     plot_figure = add_timeseries_trace(
         figure=product_figure,
@@ -130,6 +169,26 @@ def add_timeseries_trace(
     trace_name: str,
     color: str,
 ) -> go.Figure:
+    """Add a timeseries trace to a Plotly figure.
+
+    Parameters
+    ----------
+    figure : go.Figure
+        The Plotly figure to add the trace to.
+    x_data : NDArray[np.float64]
+        The x data for the trace.
+    y_data : NDArray[np.float64]
+        The y data for the trace.
+    trace_name : str
+        The name of the trace to be displayed in the legend.
+    color : str
+        The color of the trace.
+
+    Returns
+    -------
+    go.Figure
+        The Plotly figure with the added trace.
+    """
     figure.add_trace(
         go.Scatter(
             x=x_data,
@@ -143,6 +202,18 @@ def add_timeseries_trace(
 
 
 def get_purity_figure(data: ReactionEvolutionTimeseries):
+    """Plot the product purity evolution over time.
+
+    Parameters
+    ----------
+    data : ReactionEvolutionTimeseries
+        The dataclass containing the reaction evolution timeseries data.
+
+    Returns
+    -------
+    go.Figure
+        A Plotly figure for the product purity evolution over time.
+    """
     purity_figure = go.Figure()
     plot_figure = add_timeseries_trace(
         figure=purity_figure,

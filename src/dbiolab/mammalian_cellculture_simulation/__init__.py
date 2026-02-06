@@ -7,8 +7,10 @@ from .data_models import (
     MammalianRecipe,
     ReactionEvolutionTimeseries,
     ReactorType,
+    NoiseParameters,
 )
 from .cellculture_simulator import MammalianCellcultureReactor
+from .visualization import plot_reaction_evolution_timeseries
 
 
 __all__ = [
@@ -17,6 +19,8 @@ __all__ = [
     "FeedingEvent",
     "MammalianCellcultureReactor",
     "MammalianRecipe",
+    "NoiseParameters",
+    "plot_reaction_evolution_timeseries",
     "ReactionEvolutionTimeseries",
     "ReactorType",
 ]

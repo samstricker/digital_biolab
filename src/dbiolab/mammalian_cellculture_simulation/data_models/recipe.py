@@ -1,3 +1,5 @@
+"""Module for defining the MammalianRecipe dataclass and related methods."""
+
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -5,6 +7,7 @@ from typing import List
 
 from .celltypes import CellType
 from .feeding import FeedConcentrations, FeedingEvent
+from .noise import NoiseParameters
 
 
 @dataclass
@@ -29,6 +32,8 @@ class MammalianRecipe:
         The total runtime of the cell culture simulation in hours.
     measurement_intervals : float
         The time intervals at which measurements are taken during the simulation in hours.
+    noise_parameters : NoiseParameters
+        The noise parameters for process and measurement noise.
     """
 
     name: str
@@ -39,6 +44,7 @@ class MammalianRecipe:
     feeding_strategy: List[FeedingEvent]
     runtime: float
     measurement_intervals: float
+    noise_parameters: NoiseParameters
 
     @staticmethod
     def from_json(data_path: str) -> "MammalianRecipe":
@@ -86,6 +92,9 @@ class MammalianRecipe:
             ],
             runtime=data["runtime"],
             measurement_intervals=data["measurement_intervals"],
+            noise_parameters=NoiseParameters.from_dict(
+                data.get("noise_parameters", {})
+            ),
         )
 
     def to_dict(self) -> dict:
@@ -105,4 +114,5 @@ class MammalianRecipe:
             "feeding_strategy": [event.to_dict() for event in self.feeding_strategy],
             "runtime": self.runtime,
             "measurement_intervals": self.measurement_intervals,
+            "noise_parameters": self.noise_parameters.to_dict(),
         }

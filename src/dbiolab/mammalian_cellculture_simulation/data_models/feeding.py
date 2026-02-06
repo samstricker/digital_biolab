@@ -1,3 +1,5 @@
+"""This module defines dataclasses for representing feeding events and feed concentrations"""
+
 from dataclasses import dataclass
 from typing import List, Dict
 import json
@@ -116,7 +118,8 @@ class FeedConcentrations:
         -------
         List[float]
             The initial conditions as a list of floats.
-            Format: [c_product, x_total, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia, c_aggregates]
+            Format: [c_product, x_total, x_viable, x_dead, c_glc, c_gln, c_lac,
+                     c_ammonia, c_aggregates]
         """
         return [
             self.c_product,

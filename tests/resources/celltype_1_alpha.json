@@ -15,8 +15,16 @@
     "y_cells_gln": 8363679425.5848055,
     "m_glc": 4e-10,
     "m_gln": 0.0,
-    "c_ammonia": 3.7863148646,
-    "ph_opt": 6.6322667638,
-    "e_activation": 33.4625042393,
-    "scale_factor_a": 1.2
+    "ph_opt": 6.6,
+    "ph_opt_product": 6.6,
+    "ph_opt_product_robustness": 0.8,
+    "ph_robustness_factor": 1.0,
+    "e_activation": 37.4,
+    "temperature_opt_product": 37.4,
+    "temperature_robustness_factor": 1.0,
+    "temperature_opt_product_robustness": 0.8,
+    "y_product_from_total": 9.98e-08,
+    "y_product_from_viable": 4.9308e-06,
+    "hcp_per_cell": 1e-06,
+    "k_agg_product": 0.1
 }

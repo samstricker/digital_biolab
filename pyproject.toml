@@ -18,7 +18,14 @@ dependencies = [
 
 
 [dependency-groups]
-dev = ["black>=25.11.0", "mypy>=1.18.2", "pylint>=4.0.3", "pytest>=9.0.1"]
+dev = [
+    "black>=25.11.0",
+    "mypy>=1.18.2",
+    "plotly-stubs>=0.1.2",
+    "pylint>=4.0.3",
+    "pytest>=9.0.1",
+    "scipy-stubs>=1.17.0.2",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

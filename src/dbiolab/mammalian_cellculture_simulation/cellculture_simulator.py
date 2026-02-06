@@ -1,5 +1,7 @@
 """Module for simulating mammalian cell culture growth and behavior."""
 
+from typing import List, Optional
+
 import numpy as np
 from scipy.integrate import solve_ivp
 
@@ -9,6 +11,7 @@ from dbiolab.mammalian_cellculture_simulation.data_models import (
     MammalianDataset,
     ReactorType,
     ReactionEvolutionTimeseries,
+    NoiseParameters,
 )
 
 
@@ -23,8 +26,11 @@ class MammalianCellcultureReactor:
 
     def __init__(self, reactor_type: ReactorType):
         self.reactor_type = reactor_type
+        self.seed: Optional[int] = None
 
-    def run_experiment(self, recipe: MammalianRecipe) -> ReactionEvolutionTimeseries:
+    def run_experiment(
+        self, recipe: MammalianRecipe, seed: int = None
+    ) -> ReactionEvolutionTimeseries:
         """Run a cell culture simulation based on the provided recipe.
 
         Parameters
@@ -32,9 +38,12 @@ class MammalianCellcultureReactor:
         recipe : MammalianRecipe
             The dataclass with the recipe parameters.
         """
+        self.seed = seed
         solution = self._solve_odes(recipe)
-        solution_with_noise = self._add_measurement_noise(solution)
-        return solution_with_noise
+        solution = self._add_process_noise(solution, recipe.noise_parameters)
+        solution = self._add_measurement_noise(solution, recipe.noise_parameters)
+        solution = self._clip_to_physical_bounds(solution)
+        return solution
 
     def run_dataset(self, dataset: MammalianDataset) -> MammalianDataset:
         """Run simulations for all recipes in the provided dataset.
@@ -46,15 +55,16 @@ class MammalianCellcultureReactor:
 
         Returns
         -------
-        dict[str, ReactionEvolutionTimeseries]
-            A dictionary mapping recipe names to their corresponding simulation results.
+        MammalianDataset
+            A new dataset containing the reaction evolution timeseries results for each recipe.
         """
-        result = []
+        result: List[ReactionEvolutionTimeseries] = []
         for recipe in dataset.data:
             if not isinstance(recipe, MammalianRecipe):
                 raise TypeError(f"Expected MammalianRecipe, got {type(recipe)}")
-            result.append(self.run_experiment(recipe))
-        return MammalianDataset(data=result)
+            else:
+                result.append(self.run_experiment(recipe))
+        return MammalianDataset(data=result)  # type: ignore
 
     def _solve_odes(self, recipe: MammalianRecipe) -> ReactionEvolutionTimeseries:
         current_time = 0.0
@@ -76,12 +86,6 @@ class MammalianCellcultureReactor:
         )
         solutions.extend(partial_solution)
         return solutions
-
-    def _add_measurement_noise(
-        self, solution: ReactionEvolutionTimeseries
-    ) -> ReactionEvolutionTimeseries:
-        # TODO: Implement noise generator
-        return solution
 
     def _calculate_partial_solution(
         self,
@@ -139,9 +143,9 @@ class MammalianCellcultureReactor:
         ]
         return final_conditions
 
-    def _ode_system(self, t, x, recipe: MammalianRecipe):
+    def _ode_system(self, _, x, recipe: MammalianRecipe):
         # x_* here is the cell density and c_* the concentrations of the metabolites
-        _, x_total, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia, c_aggregates = x
+        _, x_total, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia, _ = x
         current_grwth_rate = self._calculate_growth_rate(
             c_glc, c_gln, c_lac, c_ammonia, recipe
         )
@@ -154,16 +158,12 @@ class MammalianCellcultureReactor:
             )
             * self.reactor_type.scale_factor
         )
-
         x_total_gradient = (current_grwth_rate * x_viable) - (
             recipe.celltype.k_lysis * x_dead
         )
-        x_viable_gradient = (current_grwth_rate - k_death) * (
-            max(x_viable, 1e-6)
-        ) ** self.reactor_type.growth_inhibition
+        x_viable_gradient = (current_grwth_rate - k_death) * x_viable
         x_dead_gradient = (k_death * x_viable) - (recipe.celltype.k_lysis * x_dead)
 
-        # TODO: Check these equations
         ph_penalty = self._calculate_ph_effect(
             recipe.ph_value,
             recipe.celltype.ph_opt_product,
@@ -253,7 +253,6 @@ class MammalianCellcultureReactor:
             * ph_factor
             * self.reactor_type.growth_inhibition
         )
-
         return growth_rate
 
     def _calculate_temperature_effect(
@@ -337,3 +336,196 @@ class MammalianCellcultureReactor:
         purity = np.clip(purity, 0, 1)
 
         return purity
+
+    def _add_process_noise(
+        self, solution: ReactionEvolutionTimeseries, noise_params: NoiseParameters
+    ) -> ReactionEvolutionTimeseries:
+        """Add process noise (Brownian motion) to the solution.
+
+        Process noise represents stochastic variations in the biological process
+        and is modeled as cumulative Brownian motion increments, scaled relative
+        to the current state value.
+
+        Parameters
+        ----------
+        solution : ReactionEvolutionTimeseries
+            The deterministic solution from ODE solving.
+        noise_params : NoiseParameters
+            The noise parameters (relative std dev).
+
+        Returns
+        -------
+        ReactionEvolutionTimeseries
+            Solution with process noise added.
+        """
+        n_timepoints = len(solution.timepoints)
+        dt = np.diff(solution.timepoints)
+
+        state_noise_pairs = self._get_state_noise_pairs(
+            solution, noise_params, noise_type="process"
+        )
+
+        for state_array, noise_std in state_noise_pairs:
+            if noise_std > 0:
+                # Scale noise relative to current value
+                relative_noise = state_array[:-1] * noise_std
+                brownian_increments = self._generate_brownian_motion(
+                    1.0, n_timepoints - 1, dt
+                )
+                state_array[1:] += relative_noise * brownian_increments
+
+        return solution
+
+    def _add_measurement_noise(
+        self, solution: ReactionEvolutionTimeseries, noise_params: NoiseParameters
+    ) -> ReactionEvolutionTimeseries:
+        """Add measurement noise to the solution at each timepoint.
+
+        Measurement noise represents sensor/measurement inaccuracies and is
+        modeled as Gaussian white noise scaled relative to the measured value.
+
+        Parameters
+        ----------
+        solution : ReactionEvolutionTimeseries
+            The solution (possibly with process noise).
+        noise_params : NoiseParameters
+            The noise parameters (relative std dev).
+
+        Returns
+        -------
+        ReactionEvolutionTimeseries
+            Solution with measurement noise added.
+        """
+        state_noise_pairs = self._get_state_noise_pairs(
+            solution, noise_params, noise_type="measurement"
+        )
+
+        for state_array, noise_std in state_noise_pairs:
+            if noise_std > 0:
+                # Scale noise relative to current value
+                relative_noise = state_array * noise_std
+                gaussian_noise = self._generate_gaussian_noise(1.0, len(state_array))
+                state_array += relative_noise * gaussian_noise
+
+        return solution
+
+    def _get_state_noise_pairs(
+        self,
+        solution: ReactionEvolutionTimeseries,
+        noise_params: NoiseParameters,
+        noise_type: str,
+    ) -> list:
+        """Get list of (state_array, noise_std) tuples for all species.
+
+        Parameters
+        ----------
+        solution : ReactionEvolutionTimeseries
+            The solution object containing all state arrays.
+        noise_params : NoiseParameters
+            The noise parameters object.
+        noise_type : str
+            Either "process" or "measurement" to select noise type.
+
+        Returns
+        -------
+        list
+            List of (state_array, noise_std) tuples.
+        """
+        prefix = f"{noise_type}_noise_"
+        species = [
+            ("c_product", solution.c_product),
+            ("x_total", solution.x_total),
+            ("x_viable", solution.x_viable),
+            ("x_dead", solution.x_dead),
+            ("c_glc", solution.c_glc),
+            ("c_gln", solution.c_gln),
+            ("c_lac", solution.c_lac),
+            ("c_ammonia", solution.c_ammonia),
+            ("c_aggregates", solution.c_aggregates),
+        ]
+
+        return [
+            (state_array, getattr(noise_params, f"{prefix}{name}"))
+            for name, state_array in species
+        ]
+
+    def _generate_brownian_motion(
+        self, noise_std: float, n_steps: int, dt_array: np.ndarray
+    ) -> np.ndarray:
+        """Generate cumulative Brownian motion increments.
+
+        When noise_std=1.0, returns normalized cumulative increments (unit variance).
+        Scaling should be done externally for relative noise.
+
+        Parameters
+        ----------
+        noise_std : float
+            Standard deviation coefficient (typically 1.0 for relative noise).
+        n_steps : int
+            Number of steps.
+        dt_array : np.ndarray
+            Array of time intervals.
+
+        Returns
+        -------
+        np.ndarray
+            Cumulative Brownian motion increments.
+        """
+        rng = np.random.default_rng(seed=self.seed)
+        self.seed += 1  # ensure different noise each time
+        increments = rng.normal(0, noise_std, n_steps) * np.sqrt(dt_array)
+        return np.cumsum(increments)
+
+    def _generate_gaussian_noise(self, noise_std: float, n_points: int) -> np.ndarray:
+        """Generate Gaussian white noise.
+
+        When noise_std=1.0, returns normalized Gaussian noise (unit variance).
+        Scaling should be done externally for relative noise.
+
+        Parameters
+        ----------
+        noise_std : float
+            Standard deviation coefficient (typically 1.0 for relative noise).
+        n_points : int
+            Number of noise points.
+
+        Returns
+        -------
+        np.ndarray
+            Gaussian white noise array.
+        """
+        rng = np.random.default_rng(seed=self.seed)
+        self.seed += 1  # ensure different noise each time
+        return rng.normal(0, noise_std, n_points)
+
+    def _clip_to_physical_bounds(
+        self, solution: ReactionEvolutionTimeseries
+    ) -> ReactionEvolutionTimeseries:
+        """Clip all state variables to non-negative values for physical validity.
+
+        Ensures that noise does not produce unphysical negative concentrations
+        or cell densities.
+
+        Parameters
+        ----------
+        solution : ReactionEvolutionTimeseries
+            The solution with noise applied.
+
+        Returns
+        -------
+        ReactionEvolutionTimeseries
+            Solution with all values clipped to [0, ∞).
+        """
+        solution.c_product = np.clip(solution.c_product, 0, None)
+        solution.x_total = np.clip(solution.x_total, 0, None)
+        solution.x_viable = np.clip(solution.x_viable, 0, None)
+        solution.x_dead = np.clip(solution.x_dead, 0, None)
+        solution.c_glc = np.clip(solution.c_glc, 0, None)
+        solution.c_gln = np.clip(solution.c_gln, 0, None)
+        solution.c_lac = np.clip(solution.c_lac, 0, None)
+        solution.c_ammonia = np.clip(solution.c_ammonia, 0, None)
+        solution.c_aggregates = np.clip(solution.c_aggregates, 0, None)
+        # Purity is already clipped in _calculate_purity, but ensure it's in [0, 1]
+        solution.purity = np.clip(solution.purity, 0, 1)
+
+        return solution

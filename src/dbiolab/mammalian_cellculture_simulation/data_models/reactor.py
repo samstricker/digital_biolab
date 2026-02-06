@@ -19,15 +19,12 @@ class ReactorType:
         Scale factor for the reactor [-].
     growth_inhibition : float
         Growth inhibition factor [-].
-    noise_level : float
-        Noise level in the reactor simulations [-].
     """
 
     name: str
     volume: float
     scale_factor: float
     growth_inhibition: float
-    noise_level: float
 
     @staticmethod
     def from_json(data_path: str) -> "ReactorType":
