@@ -133,6 +133,16 @@ class FeedConcentrations:
             self.c_aggregates,
         ]
 
+    def copy(self) -> "FeedConcentrations":
+        """Return a copy of the FeedConcentrations instance.
+
+        Returns
+        -------
+        FeedConcentrations
+            A copy of the FeedConcentrations instance.
+        """
+        return FeedConcentrations.from_dict(self.to_dict())
+
 
 @dataclass
 class FeedingEvent:
@@ -219,3 +229,13 @@ class FeedingEvent:
             "time_point": self.time_point,
             "feed_concentrations": self.feed_concentrations.to_dict(),
         }
+
+    def copy(self) -> "FeedingEvent":
+        """Return a copy of the FeedingEvent instance.
+
+        Returns
+        -------
+        FeedingEvent
+            A copy of the FeedingEvent instance.
+        """
+        return FeedingEvent.from_dict(self.to_dict())
