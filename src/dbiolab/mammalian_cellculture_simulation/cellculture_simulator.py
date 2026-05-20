@@ -45,13 +45,17 @@ class MammalianCellcultureReactor:
         solution = self._clip_to_physical_bounds(solution)
         return solution
 
-    def run_dataset(self, dataset: MammalianDataset) -> MammalianDataset:
+    def run_dataset(
+        self, dataset: MammalianDataset, seed: Optional[int] = None
+    ) -> MammalianDataset:
         """Run simulations for all recipes in the provided dataset.
 
         Parameters
         ----------
         dataset : MammalianDataset
             The dataclass with the dataset parameters.
+        seed : Optional[int]
+            The random seed for reproducibility.
 
         Returns
         -------
@@ -63,7 +67,7 @@ class MammalianCellcultureReactor:
             if not isinstance(recipe, MammalianRecipe):
                 raise TypeError(f"Expected MammalianRecipe, got {type(recipe)}")
             else:
-                result.append(self.run_experiment(recipe))
+                result.append(self.run_experiment(recipe, seed=seed))
         return MammalianDataset(data=result)  # type: ignore
 
     def _solve_odes(self, recipe: MammalianRecipe) -> ReactionEvolutionTimeseries:
