@@ -167,8 +167,9 @@ class MammalianCellcultureReactor:
         product_formation = (x_total * recipe.celltype.y_product_from_total) + (
             recipe.celltype.y_product_from_viable * x_viable * current_growth_rate
         )
-        product_aggregation = recipe.celltype.k_agg_product * (product_formation**2)
-        product_gradient = product_formation - product_aggregation
+        c_product = x[0]  # Get current product concentration
+        product_aggregation = recipe.celltype.k_agg_product * (c_product**2)
+        product_gradient = product_formation - 2 * product_aggregation
 
         c_glc_gradient = x_viable * (
             (-current_growth_rate / recipe.celltype.y_cells_glc) - recipe.celltype.m_glc

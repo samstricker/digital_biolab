@@ -92,10 +92,10 @@ $$\frac{dx_{dead}}{dt} = k_{death} \cdot x_{viable} - k_{lysis} \cdot x_{dead}$$
 ### Metabolite Dynamics
 
 #### Product Formation and Aggregation
-$$\frac{dc_{product}}{dt} = \left(x_{total} \cdot y_{product,total} + x_{viable} \cdot y_{product,viable} \cdot \mu\right) - k_{agg} \cdot c_{product}^2$$
+$$\frac{dc_{product}}{dt} = \left(x_{total} \cdot y_{product,total} + x_{viable} \cdot y_{product,viable} \cdot \mu\right) - 2 \cdot k_{agg} \cdot c_{product}^2$$
 
 #### Product Aggregation
-$$\frac{dc_{aggregates}}{dt} = k_{agg} \cdot \left(\frac{dc_{product}}{dt}\right)^2$$
+$$\frac{dc_{aggregates}}{dt} = k_{agg} \cdot c_{product}^2$$
 
 #### Glucose Consumption
 $$\frac{dc_{glc}}{dt} = x_{viable} \cdot \left(-\frac{\mu}{y_{cells,glc}} - m_{glc}\right)$$
