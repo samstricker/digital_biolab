@@ -66,8 +66,7 @@ class MammalianCellcultureReactor:
         for recipe in dataset.data:
             if not isinstance(recipe, MammalianRecipe):
                 raise TypeError(f"Expected MammalianRecipe, got {type(recipe)}")
-            else:
-                result.append(self.run_experiment(recipe, seed=seed))
+            result.append(self.run_experiment(recipe, seed=seed))
         return MammalianDataset(data=result)  # type: ignore
 
     def _solve_odes(self, recipe: MammalianRecipe) -> ReactionEvolutionTimeseries:

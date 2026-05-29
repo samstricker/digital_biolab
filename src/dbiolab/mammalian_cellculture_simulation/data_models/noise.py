@@ -1,8 +1,8 @@
 """Data model for noise parameters in cell culture simulation."""
 
+import json
 from dataclasses import dataclass
 from typing import Dict
-import json
 from pathlib import Path
 
 

@@ -1,7 +1,7 @@
 """Module for defining the MammalianDataset dataclass and related methods."""
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Union, cast
 
@@ -52,7 +52,7 @@ class MammalianDataset:
         return names
 
     @property
-    def get_types(self) -> str:
+    def dataset_type(self) -> str:
         """Get the types of the dataset.
         Returns
         -------

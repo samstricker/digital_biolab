@@ -1,7 +1,7 @@
 """Data model for Recipes in digital biolab."""
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from typing import Dict
 from pathlib import Path
 
@@ -18,12 +18,12 @@ class ReactionEvolutionTimeseries:
     timepoints : NDArray[np.float64]
         Timepoints of the simulation [h].
     c_product : NDArray[np.float64]
-        product concentration [mM].
+        Product concentration [mM].
     x_total : NDArray[np.float64]
         Initial total cell density [cells mL^-1].
     x_viable : NDArray[np.float64]
         Initial viable cell density [cells mL^-1].
-    X_dead : NDArray[np.float64]
+    x_dead : NDArray[np.float64]
         Initial dead cell density [cells mL^-1].
     c_glc : NDArray[np.float64]
         Initial glucose concentration [mM].
@@ -140,6 +140,8 @@ class ReactionEvolutionTimeseries:
             c_gln=np.array(data["c_gln"]),
             c_lac=np.array(data["c_lac"]),
             c_ammonia=np.array(data["c_ammonia"]),
+            c_aggregates=np.array(data["c_aggregates"]),
+            purity=np.array(data["purity"]),
         )
 
     def to_json(self, output_path: str) -> None:

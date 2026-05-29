@@ -1,8 +1,8 @@
 """This module defines dataclasses for representing feeding events and feed concentrations"""
 
+import json
 from dataclasses import dataclass
 from typing import List, Dict
-import json
 from pathlib import Path
 
 
@@ -18,7 +18,7 @@ class FeedConcentrations:
         Initial total cell density [cells mL^-1].
     x_viable : float
         Initial viable cell density [cells mL^-1].
-    X_dead : float
+    x_dead : float
         Initial dead cell density [cells mL^-1].
     c_glc : float
         Initial glucose concentration [mM].

@@ -1,7 +1,7 @@
 """Data model for reactor type used in simulations."""
 
-from dataclasses import dataclass, asdict
 import json
+from dataclasses import dataclass, asdict
 from pathlib import Path
 
 
@@ -33,7 +33,7 @@ class ReactorType:
         Parameters
         ----------
         data_path : str
-            A dictionary containing the reactor type parameters.
+            Path to the JSON file containing the reactor type data.
 
         Returns
         -------

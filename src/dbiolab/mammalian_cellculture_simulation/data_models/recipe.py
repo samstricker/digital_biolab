@@ -1,7 +1,7 @@
 """Module for defining the MammalianRecipe dataclass and related methods."""
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
@@ -116,3 +116,14 @@ class MammalianRecipe:
             "measurement_intervals": self.measurement_intervals,
             "noise_parameters": self.noise_parameters.to_dict(),
         }
+
+    def to_json(self, output_path: str) -> None:
+        """Save the recipe to a JSON file.
+
+        Parameters
+        ----------
+        output_path : str
+            The path to the output JSON file.
+        """
+        path = Path(output_path)
+        path.write_text(json.dumps(self.to_dict(), indent=4), encoding="utf-8")
