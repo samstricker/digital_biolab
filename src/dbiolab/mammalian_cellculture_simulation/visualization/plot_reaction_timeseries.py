@@ -6,9 +6,6 @@ import numpy as np
 from numpy.typing import NDArray
 import plotly.graph_objects as go
 
-from build.lib.dbiolab.mammalian_cellculture_simulation.visualization.plot_reaction_timeseries import (
-    add_timeseries_trace,
-)
 from dbiolab.mammalian_cellculture_simulation import ReactionEvolutionTimeseries
 
 
@@ -206,7 +203,6 @@ def add_timeseries_trace(
             line=dict(color=color),
         )
     )
-    return figure
 
 
 def get_purity_figure(data: ReactionEvolutionTimeseries):
