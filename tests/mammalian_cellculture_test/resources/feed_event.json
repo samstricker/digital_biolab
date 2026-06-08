@@ -1,0 +1,14 @@
+{
+    "time_point": 700.0,
+    "feed_concentrations": {
+        "c_product": 0.0,
+        "x_total": 0.0,
+        "x_viable": 0.0,
+        "x_dead": 0.0,
+        "c_glc": 2.0,
+        "c_gln": 0.0,
+        "c_lac": 0.0,
+        "c_ammonia": 0.0,
+        "c_aggregates": 0.0
+    }
+}
