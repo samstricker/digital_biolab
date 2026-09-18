@@ -49,8 +49,8 @@ where $f_{temp}$ and $f_{pH}$ are temperature and pH penalty factors.
 The temperature penalty factor uses asymmetric Gaussian functions:
 
 $$f_{temp} = r_{temp} \cdot \begin{cases}
-\exp\left(-0.8 \cdot \left(\frac{T - T_{opt}}{3.0}\right)^2\right) & \text{if } T < T_{opt} \\
-\exp\left(-1.0 \cdot \left(\frac{T - T_{opt}}{8.0}\right)^2\right) & \text{if } T \geq T_{opt}
+\exp\left(-steepness_{temp,l} \cdot \left(\frac{T - T_{opt}}{smoothness_{temp,l}}\right)^2\right) & \text{if } T < T_{opt} \\
+\exp\left(-steepness_{temp,r} \cdot \left(\frac{T - T_{opt}}{smoothness_{temp,r}}\right)^2\right) & \text{if } T \geq T_{opt}
 \end{cases}$$
 
 where $T_{opt}$ is the optimal temperature (e_activation) and $r_{temp}$ is the temperature robustness factor. The factor is clipped to a minimum of 0.2.
@@ -59,8 +59,8 @@ where $T_{opt}$ is the optimal temperature (e_activation) and $r_{temp}$ is the 
 The pH penalty factor similarly uses asymmetric Gaussian functions:
 
 $$f_{pH} = r_{pH} \cdot \begin{cases}
-\exp\left(-0.8 \cdot \left(\frac{pH - pH_{opt}}{1.5}\right)^2\right) & \text{if } pH < pH_{opt} \\
-\exp\left(-1.5 \cdot \left(\frac{pH - pH_{opt}}{0.5}\right)^2\right) & \text{if } pH \geq pH_{opt}
+\exp\left(-steepness_{pH,l} \cdot \left(\frac{pH - pH_{opt}}{smoothness_{pH,l}}\right)^2\right) & \text{if } pH < pH_{opt} \\
+\exp\left(-steepness_{pH,r} \cdot \left(\frac{pH - pH_{opt}}{smoothness_{pH,r}}\right)^2\right) & \text{if } pH \geq pH_{opt}
 \end{cases}$$
 
 where $pH_{opt}$ is the optimal pH and $r_{pH}$ is the pH robustness factor. The factor is clipped to a minimum of 0.2.
@@ -141,8 +141,10 @@ $$c_{HCP} = x_{dead} \cdot k_{lysis} \cdot hcp_{per\_cell}$$
 - $g_{inhibition}$: Growth inhibition exponent [`growth_inhibition`]
 - $T_{opt}$: Optimal temperature for growth [`e_activation`]
 - $r_{temp}$: Temperature robustness factor [`temperature_robustness_factor`]
+- $steepness_{temp,l}$, $steepness_{temp,r}$: Steepness factors for temperature effect on the left and right side of the optimal temperature [`steepness_factor_t_l`, `steepness_factor_t_r`]
 - $pH_{opt}$: Optimal pH for growth [`ph_opt`]
 - $r_{pH}$: pH robustness factor [`ph_robustness_factor`]
+- $steepness_{pH,l}$, $steepness_{pH,r}$: Steepness factors for pH effect on the left and right side of the optimal pH [`steepness_factor_ph_l`, `steepness_factor_ph_r`]
 
 ### Noise in Simulations
 There are two types of noise that can be added to the simulations to create more realistic and variable outcomes, mimicking the inherent stochasticity in biological systems and measurement processes.

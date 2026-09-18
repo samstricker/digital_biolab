@@ -47,10 +47,26 @@ class CellType:
         Optimal pH.
     ph_robustness_factor : float
         pH robustness factor.
+    steepness_factor_ph_l : float
+        Steepness factor for pH effect on the left side of the optimal pH.
+    steepness_factor_ph_r : float
+        Steepness factor for pH effect on the right side of the optimal pH.
+    smoothness_factor_ph_l : float
+        Smoothness factor for pH effect on the left side of the optimal pH.
+    smoothness_factor_ph_r : float
+        Smoothness factor for pH effect on the right side of the optimal pH.
     e_activation : float
         Enzyme activation energy.
     temperature_robustness_factor : float
         Temperature robustness factor.
+    steepness_factor_t_l : float
+        Steepness factor for temperature effect on the left side of the optimal temperature.
+    steepness_factor_t_r : float
+        Steepness factor for temperature effect on the right side of the optimal temperature.
+    smoothness_factor_t_l : float
+        Smoothness factor for temperature effect on the left side of the optimal temperature.
+    smoothness_factor_t_r : float
+        Smoothness factor for temperature effect on the right side of the optimal temperature.
     y_product_from_total : float
         Product yield from total cells [-].
     y_product_from_viable : float
@@ -86,8 +102,16 @@ class CellType:
     m_gln: float
     ph_opt: float
     ph_robustness_factor: float
+    steepness_factor_ph_l: float
+    steepness_factor_ph_r: float
+    smoothness_factor_ph_l: float
+    smoothness_factor_ph_r: float
     e_activation: float
     temperature_robustness_factor: float
+    steepness_factor_t_l: float
+    steepness_factor_t_r: float
+    smoothness_factor_t_l: float
+    smoothness_factor_t_r: float
     y_product_from_total: float
     y_product_from_viable: float
     hcp_per_cell: float

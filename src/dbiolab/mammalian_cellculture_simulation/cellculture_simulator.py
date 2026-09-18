@@ -216,11 +216,19 @@ class MammalianCellcultureReactor:
             recipe.temperature,
             recipe.celltype.e_activation,
             recipe.celltype.temperature_robustness_factor,
+            recipe.celltype.steepness_factor_t_l,
+            recipe.celltype.steepness_factor_t_r,
+            recipe.celltype.smoothness_factor_t_l,
+            recipe.celltype.smoothness_factor_t_r
         )
         ph_factor = self._calculate_ph_effect(
             recipe.ph_value,
             recipe.celltype.ph_opt,
             recipe.celltype.ph_robustness_factor,
+            recipe.celltype.steepness_factor_ph_l,
+            recipe.celltype.steepness_factor_ph_r,
+            recipe.celltype.smoothness_factor_ph_l,
+            recipe.celltype.smoothness_factor_ph_r
         )
         growth_rate = (
             recipe.celltype.mu_max
@@ -243,19 +251,20 @@ class MammalianCellcultureReactor:
         temperature: float,
         e_activation: float,
         temperature_robustness_factor: float,
+        steepness_factor_t_l: float,
+        steepness_factor_t_r: float,
+        smoothness_factor_t_l: float,
+        smoothness_factor_t_r: float,
     ) -> float:
-        steepness_factor_l = 0.8
-        steepness_factor_r = 1.0
-        smoothness_factor_l = 3.0
-        smoothness_factor_r = 8.0
+        
 
         left_part = np.exp(
-            -steepness_factor_l
-            * ((temperature - e_activation) / smoothness_factor_l) ** 2
+            -steepness_factor_t_l
+            * ((temperature - e_activation) / smoothness_factor_t_l) ** 2
         )
         right_part = np.exp(
-            -steepness_factor_r
-            * ((temperature - e_activation) / smoothness_factor_r) ** 2
+            -steepness_factor_t_r
+            * ((temperature - e_activation) / smoothness_factor_t_r) ** 2
         )
         factor = temperature_robustness_factor * np.where(
             temperature < e_activation, left_part, right_part
@@ -266,18 +275,22 @@ class MammalianCellcultureReactor:
         return float(factor)
 
     def _calculate_ph_effect(
-        self, ph_value: float, ph_opt: float, ph_robustness_factor: float
+        self,
+        ph_value: float,
+        ph_opt: float,
+        ph_robustness_factor: float,
+        steepness_factor_ph_l: float,
+        steepness_factor_ph_r: float,
+        smoothness_factor_ph_l: float,
+        smoothness_factor_ph_r: float,
     ) -> float:
-        steepness_factor_l = 0.8
-        steepness_factor_r = 1.5
-        smoothness_factor_l = 1.5
-        smoothness_factor_r = 0.5
+        
 
         left_part = np.exp(
-            -steepness_factor_l * ((ph_value - ph_opt) / smoothness_factor_l) ** 2
+            -steepness_factor_ph_l * ((ph_value - ph_opt) / smoothness_factor_ph_l) ** 2
         )
         right_part = np.exp(
-            -steepness_factor_r * ((ph_value - ph_opt) / smoothness_factor_r) ** 2
+            -steepness_factor_ph_r * ((ph_value - ph_opt) / smoothness_factor_ph_r) ** 2
         )
         factor = ph_robustness_factor * np.where(
             ph_value < ph_opt, left_part, right_part
