@@ -3,7 +3,7 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from .celltypes import CellType
 from .feeding import FeedConcentrations, FeedingEvent
@@ -24,6 +24,12 @@ class MammalianRecipe:
         The temperature of the cell culture environment in Celsius.
     ph_value : float
         The pH level of the cell culture medium.
+    stirring_rate : float
+        The impeller stirring rate [rpm].
+    do_setpoint : Optional[float]
+        Dissolved oxygen setpoint as a fraction of air saturation (typical
+        0.3-0.5). The sparged gas is enriched with pure oxygen to hold it.
+        None sparges air only.
     initial_conditions : InitialConditions
         The initial conditions of the cell culture.
     feeding_strategy : List[FeedingEvent]
@@ -40,11 +46,13 @@ class MammalianRecipe:
     celltype: CellType
     temperature: float
     ph_value: float
+    stirring_rate: float
     initial_conditions: FeedConcentrations
     feeding_strategy: List[FeedingEvent]
     runtime: float
     measurement_intervals: float
     noise_parameters: NoiseParameters
+    do_setpoint: Optional[float]
 
     @staticmethod
     def from_json(data_path: str) -> "MammalianRecipe":
@@ -86,6 +94,7 @@ class MammalianRecipe:
             celltype=CellType.from_dict(data["celltype"]),
             temperature=data["temperature"],
             ph_value=data["ph_value"],
+            stirring_rate=data["stirring_rate"],
             initial_conditions=FeedConcentrations.from_dict(data["initial_conditions"]),
             feeding_strategy=[
                 FeedingEvent.from_dict(event) for event in data["feeding_strategy"]
@@ -95,6 +104,7 @@ class MammalianRecipe:
             noise_parameters=NoiseParameters.from_dict(
                 data.get("noise_parameters", {})
             ),
+            do_setpoint=data["do_setpoint"],
         )
 
     def to_dict(self) -> dict:
@@ -110,11 +120,13 @@ class MammalianRecipe:
             "celltype": self.celltype.to_dict(),
             "temperature": self.temperature,
             "ph_value": self.ph_value,
+            "stirring_rate": self.stirring_rate,
             "initial_conditions": self.initial_conditions.to_dict(),
             "feeding_strategy": [event.to_dict() for event in self.feeding_strategy],
             "runtime": self.runtime,
             "measurement_intervals": self.measurement_intervals,
             "noise_parameters": self.noise_parameters.to_dict(),
+            "do_setpoint": self.do_setpoint,
         }
 
     def to_json(self, output_path: str) -> None:

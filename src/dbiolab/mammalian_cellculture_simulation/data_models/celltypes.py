@@ -141,6 +141,25 @@ class CellType:
         Factor by which maintenance and lactate formation change per 10 C [-].
     t_ref_metabolism : float
         Temperature at which the Q10 factor is 1 [C].
+    q_o2 : float
+        Specific oxygen uptake rate [mM mL cell^-1 h^-1].
+    k_sat_o2 : float
+        Saturation constant for dissolved oxygen (growth and production) [mM].
+    k_lactate_hypoxia : float
+        Relative rise of the lactate yield without oxygen [-].
+    eps_crit : float
+        Local energy dissipation at which shear doubles the death rate
+        [W kg^-1]. Shear adds ``(eps_max / eps_crit)^2`` to the death stress.
+    t_mix_crit : float
+        Mixing time at which gradients (zones of concentrated feed and base,
+        low oxygen) double the death rate [s]. With ``g = (t_mix /
+        t_mix_crit)^2``, growth is divided by ``1 + g`` and ``g`` is added to
+        the death stress.
+    respiratory_quotient : float
+        CO2 produced per O2 consumed [-] (CHO: about 0.9-1.0).
+    pco2_crit : float
+        CO2 partial pressure at which growth and production are halved
+        [mmHg]; both are divided by ``1 + (pCO2 / pco2_crit)^3``.
 
     Notes
     -----
@@ -212,6 +231,13 @@ class CellType:
     ph_ref_lactate: float
     q10_metabolism: float
     t_ref_metabolism: float
+    q_o2: float
+    k_sat_o2: float
+    k_lactate_hypoxia: float
+    eps_crit: float
+    t_mix_crit: float
+    respiratory_quotient: float
+    pco2_crit: float
 
     @staticmethod
     def from_json(data_path: str) -> "CellType":

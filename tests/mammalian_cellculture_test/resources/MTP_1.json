@@ -1,6 +1,16 @@
 {
     "name": "MTP_1",
     "volume": 3.0,
-    "scale_factor": 5.0,
-    "growth_inhibition": 0.95
+    "scale_factor": 1.0,
+    "growth_inhibition": 1.0,
+    "impeller_diameter": 0.05,
+    "power_number": 1.5,
+    "superficial_gas_velocity": 0.000125,
+    "kla_constant": 0.002,
+    "kla_power_exponent": 0.7,
+    "kla_gas_exponent": 0.2,
+    "max_to_mean_dissipation": 30.0,
+    "o2_saturation": 0.2,
+    "tank_diameter": 0.13,
+    "gas_co2_fraction": 0.05
 }

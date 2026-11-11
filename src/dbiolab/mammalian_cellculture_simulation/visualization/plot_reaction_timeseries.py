@@ -5,6 +5,11 @@ from typing import List
 import numpy as np
 from numpy.typing import NDArray
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+from dbiolab.mammalian_cellculture_simulation.data_models.reactor import (
+    CO2_SOLUBILITY,
+)
 
 from dbiolab.mammalian_cellculture_simulation import ReactionEvolutionTimeseries
 
@@ -23,17 +28,20 @@ def plot_reaction_evolution_timeseries(
     -------
     List[go.Figure]
         A list of Plotly figures for the reaction evolution timeseries data.
-        order: [cell density, metabolite concentrations, product concentration, purity]
+        order: [cell density, metabolite concentrations, product concentration,
+        purity, dissolved oxygen]
     """
     cell_density_figure = get_cell_density_figure(data)
     metabolite_concentration_figure = get_metabolite_concentration_figure(data)
     product_concentration_figure = get_product_concentration_figure(data)
     purity_figure = get_purity_figure(data)
+    dissolved_oxygen_figure = get_dissolved_oxygen_figure(data)
     return [
         cell_density_figure,
         metabolite_concentration_figure,
         product_concentration_figure,
         purity_figure,
+        dissolved_oxygen_figure,
     ]
 
 
@@ -248,3 +256,70 @@ def get_purity_figure(data: ReactionEvolutionTimeseries):
         height=500,
     )
     return purity_figure
+
+
+def get_dissolved_oxygen_figure(data: ReactionEvolutionTimeseries):
+    """Plot dissolved oxygen and the gas oxygen fraction over time.
+
+    Parameters
+    ----------
+    data : ReactionEvolutionTimeseries
+        The dataclass containing the reaction evolution timeseries data.
+
+    Returns
+    -------
+    go.Figure
+        A Plotly figure with the dissolved oxygen, the oxygen fraction of the
+        sparged gas set by the DO controller, and the CO2 partial pressure.
+    """
+    oxygen_figure = make_subplots(
+        rows=3,
+        cols=1,
+        shared_xaxes=True,
+        subplot_titles=(
+            "Dissolved oxygen",
+            "Oxygen fraction of the sparged gas",
+            "Dissolved CO2",
+        ),
+    )
+    oxygen_figure.add_trace(
+        go.Scatter(
+            x=data.timepoints,
+            y=data.c_o2,
+            mode="lines",
+            line={"color": "teal"},
+            name="Dissolved Oxygen",
+        ),
+        row=1,
+        col=1,
+    )
+    oxygen_figure.add_trace(
+        go.Scatter(
+            x=data.timepoints,
+            y=data.o2_fraction,
+            mode="lines",
+            line={"color": "navy"},
+            name="Gas O2 Fraction",
+        ),
+        row=2,
+        col=1,
+    )
+    oxygen_figure.update_yaxes(title_text="Concentration (mM)", row=1, col=1)
+    oxygen_figure.add_trace(
+        go.Scatter(
+            x=data.timepoints,
+            y=data.c_co2 / CO2_SOLUBILITY,
+            mode="lines",
+            line={"color": "darkred"},
+            name="pCO2",
+        ),
+        row=3,
+        col=1,
+    )
+    oxygen_figure.update_yaxes(title_text="O2 fraction (-)", row=2, col=1)
+    oxygen_figure.update_yaxes(title_text="pCO2 (mmHg)", row=3, col=1)
+    oxygen_figure.update_xaxes(title_text="Time (hours)", row=3, col=1)
+    oxygen_figure.update_layout(
+        title="Dissolved Gases Over Time", width=800, height=800
+    )
+    return oxygen_figure

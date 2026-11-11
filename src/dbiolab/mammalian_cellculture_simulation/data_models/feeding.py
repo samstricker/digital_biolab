@@ -34,6 +34,10 @@ class FeedConcentrations:
         Glycated product concentration [mM].
     c_hcp : float
         Host cell protein concentration [mM].
+    c_o2 : float
+        Dissolved oxygen concentration [mM].
+    c_co2 : float
+        Dissolved CO2 concentration [mM].
     """
 
     c_product: float
@@ -47,6 +51,8 @@ class FeedConcentrations:
     c_aggregates: float
     c_glycated: float
     c_hcp: float
+    c_o2: float
+    c_co2: float
 
     @staticmethod
     def from_json(data_path: str) -> "FeedConcentrations":
@@ -117,6 +123,8 @@ class FeedConcentrations:
             "c_aggregates": self.c_aggregates,
             "c_glycated": self.c_glycated,
             "c_hcp": self.c_hcp,
+            "c_o2": self.c_o2,
+            "c_co2": self.c_co2,
         }
 
     def as_list(self) -> List[float]:
@@ -127,7 +135,7 @@ class FeedConcentrations:
         List[float]
             The initial conditions as a list of floats.
             Format: [c_product, x_total, x_viable, x_dead, c_glc, c_gln, c_lac,
-                     c_ammonia, c_aggregates, c_glycated, c_hcp]
+                     c_ammonia, c_aggregates, c_glycated, c_hcp, c_o2, c_co2]
         """
         return [
             self.c_product,
@@ -141,6 +149,8 @@ class FeedConcentrations:
             self.c_aggregates,
             self.c_glycated,
             self.c_hcp,
+            self.c_o2,
+            self.c_co2,
         ]
 
     def copy(self) -> "FeedConcentrations":
@@ -173,6 +183,9 @@ class FeedingEvent:
         keep the current temperature (e.g. for a temperature shift).
     ph_value : Optional[float]
         New pH setpoint from this time point on, or None to keep the current pH.
+    stirring_rate : Optional[float]
+        New stirring rate [rpm] from this time point on, or None to keep the
+        current stirring rate.
     """
 
     time_point: float
@@ -180,6 +193,7 @@ class FeedingEvent:
     volume_fraction: float
     temperature: Optional[float] = None
     ph_value: Optional[float] = None
+    stirring_rate: Optional[float] = None
 
     @staticmethod
     def from_json(data_path: str) -> "FeedingEvent":
@@ -236,6 +250,7 @@ class FeedingEvent:
             volume_fraction=data["volume_fraction"],
             temperature=data.get("temperature"),
             ph_value=data.get("ph_value"),
+            stirring_rate=data.get("stirring_rate"),
         )
 
     def to_dict(self) -> Dict:
@@ -252,6 +267,7 @@ class FeedingEvent:
             "volume_fraction": self.volume_fraction,
             "temperature": self.temperature,
             "ph_value": self.ph_value,
+            "stirring_rate": self.stirring_rate,
         }
 
     def copy(self) -> "FeedingEvent":

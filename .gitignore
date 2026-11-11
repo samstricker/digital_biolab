@@ -7,3 +7,6 @@ src/dbiolab/mammalian_cellculture_simulation/reactor_types/*
 **/dbiolab.egg-info/**
 .DS_Store
 /build/**
+
+# Output of setup_and_tutorial/scale_library.ipynb
+generated_library/

@@ -1,9 +1,9 @@
 {
     "name": "celltype_1_alpha",
-    "mu_max": 0.0451639932,
+    "mu_max": 0.0429057935,
     "k_lysis": 0.01,
     "k_deg_gln": 0.0013441722,
-    "k_death_max": 0.0007,
+    "k_death_max": 0.0035,
     "k_death_mu": 0.0145125692,
     "k_sat_lac": 25.0,
     "k_sat_ammonia": 10.0,
@@ -60,5 +60,12 @@
     "k_lactate_ph": 1.0,
     "ph_ref_lactate": 7.0,
     "q10_metabolism": 2.0,
-    "t_ref_metabolism": 37.0
+    "t_ref_metabolism": 37.0,
+    "q_o2": 1e-07,
+    "k_sat_o2": 0.01,
+    "k_lactate_hypoxia": 1.0,
+    "eps_crit": 5.0,
+    "t_mix_crit": 90.0,
+    "respiratory_quotient": 0.95,
+    "pco2_crit": 150.0
 }

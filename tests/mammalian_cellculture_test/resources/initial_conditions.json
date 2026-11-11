@@ -9,5 +9,7 @@
     "c_ammonia": 0.0,
     "c_aggregates": 0.0,
     "c_glycated": 0.0,
-    "c_hcp": 0.0
+    "c_hcp": 0.0,
+    "c_o2": 0.2,
+    "c_co2": 1.228
 }

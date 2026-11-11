@@ -39,6 +39,12 @@ class ReactionEvolutionTimeseries:
         Glycated product concentration [mM].
     c_hcp : NDArray[np.float64]
         Host cell protein concentration [mM].
+    c_o2 : NDArray[np.float64]
+        Dissolved oxygen concentration [mM].
+    c_co2 : NDArray[np.float64]
+        Dissolved CO2 concentration [mM].
+    o2_fraction : NDArray[np.float64]
+        Oxygen fraction of the sparged gas set by the DO controller [-].
     purity : NDArray[np.float64]
         Product purity (fraction of total protein-like substances) [-].
     """
@@ -56,6 +62,9 @@ class ReactionEvolutionTimeseries:
     c_aggregates: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     c_glycated: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     c_hcp: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    c_o2: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    c_co2: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    o2_fraction: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     purity: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
 
     def extend(self, other: "ReactionEvolutionTimeseries"):
@@ -78,6 +87,9 @@ class ReactionEvolutionTimeseries:
         self.c_aggregates = np.concatenate((self.c_aggregates, other.c_aggregates))
         self.c_glycated = np.concatenate((self.c_glycated, other.c_glycated))
         self.c_hcp = np.concatenate((self.c_hcp, other.c_hcp))
+        self.c_o2 = np.concatenate((self.c_o2, other.c_o2))
+        self.c_co2 = np.concatenate((self.c_co2, other.c_co2))
+        self.o2_fraction = np.concatenate((self.o2_fraction, other.o2_fraction))
         self.purity = np.concatenate((self.purity, other.purity))
 
     def to_dict(self) -> Dict:
@@ -102,6 +114,9 @@ class ReactionEvolutionTimeseries:
             "c_aggregates": self.c_aggregates.tolist(),
             "c_glycated": self.c_glycated.tolist(),
             "c_hcp": self.c_hcp.tolist(),
+            "c_o2": self.c_o2.tolist(),
+            "c_co2": self.c_co2.tolist(),
+            "o2_fraction": self.o2_fraction.tolist(),
             "purity": self.purity.tolist(),
         }
 
@@ -153,6 +168,9 @@ class ReactionEvolutionTimeseries:
             c_aggregates=np.array(data["c_aggregates"]),
             c_glycated=np.array(data["c_glycated"]),
             c_hcp=np.array(data["c_hcp"]),
+            c_o2=np.array(data["c_o2"]),
+            c_co2=np.array(data["c_co2"]),
+            o2_fraction=np.array(data["o2_fraction"]),
             purity=np.array(data["purity"]),
         )
 

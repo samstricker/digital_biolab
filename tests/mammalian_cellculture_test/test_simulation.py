@@ -34,11 +34,13 @@ def test_mammalian_simulation():
         celltype=celltype,
         temperature=37.0,
         ph_value=6.6,
+        stirring_rate=300.0,
         initial_conditions=initial_conditions,
         feeding_strategy=feeding_strategy,
         runtime=1000.0,
         measurement_intervals=2.0,
         noise_parameters=noise_parameters,
+        do_setpoint=0.4,
     )
     solution = simulator.run_experiment(recipe=recipe)
     assert solution is not None
@@ -62,11 +64,13 @@ def _recipe_with_shift(temperature_shift, ph_shift):
         celltype=celltype,
         temperature=37.0,
         ph_value=6.8,
+        stirring_rate=300.0,
         initial_conditions=initial_conditions,
         feeding_strategy=[feed_event],
         runtime=200.0,
         measurement_intervals=2.0,
         noise_parameters=NoiseParameters(),
+        do_setpoint=0.4,
     )
 
 
@@ -124,7 +128,44 @@ def test_setpoint_profiles_follow_the_feeds():
     )
 
     recipe = _recipe_with_shift(32.0, None)
-    times, temperatures, ph_values = get_setpoint_profiles(recipe)
+    times, temperatures, ph_values, stirring_rates = get_setpoint_profiles(recipe)
     assert times == [0.0, 100.0, 200.0]
     assert temperatures == [37.0, 32.0, 32.0]
     assert ph_values == [6.8, 6.8, 6.8]  # pH not switched: carried on
+    assert stirring_rates == [recipe.stirring_rate] * 3
+
+
+def test_reactor_oxygen_transfer_and_shear_rise_with_stirring():
+    reactor = ReactorType.from_json(
+        "tests/mammalian_cellculture_test/resources/MTP_1.json"
+    )
+    assert reactor.kla(200.0) < reactor.kla(400.0)
+    assert reactor.max_dissipation(200.0) < reactor.max_dissipation(400.0)
+    # Realistic for cell culture: kLa of a few to tens per hour
+    assert 1.0 < reactor.kla(300.0) < 50.0
+
+
+def test_do_controller_holds_the_setpoint():
+    reactor = ReactorType.from_json(
+        "tests/mammalian_cellculture_test/resources/MTP_1.json"
+    )
+    simulator = MammalianCellcultureReactor(reactor_type=reactor)
+    recipe = _recipe_with_shift(None, None)
+    recipe.do_setpoint = 0.4
+    controlled = simulator.run_experiment(recipe)
+    recipe.do_setpoint = None
+    air_only = simulator.run_experiment(recipe)
+    assert (air_only.o2_fraction == 0.21).all()
+    assert ((controlled.o2_fraction >= 0.21) & (controlled.o2_fraction <= 1.0)).all()
+    # Once the controller enriches the gas, DO sits at the setpoint
+    enriched = controlled.o2_fraction > 0.21 + 1e-9
+    if enriched.any():
+        target = 0.4 * reactor.o2_saturation
+        assert abs(controlled.c_o2[enriched][-1] - target) < 0.1 * target
+
+
+def test_mixing_time_falls_with_stirring():
+    reactor = ReactorType.from_json(
+        "tests/mammalian_cellculture_test/resources/MTP_1.json"
+    )
+    assert reactor.mixing_time(100.0) > reactor.mixing_time(300.0) > 0.0

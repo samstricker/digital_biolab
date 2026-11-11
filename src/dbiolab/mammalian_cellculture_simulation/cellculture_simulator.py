@@ -13,10 +13,16 @@ from dbiolab.mammalian_cellculture_simulation.data_models import (
     ReactionEvolutionTimeseries,
     NoiseParameters,
 )
+from dbiolab.mammalian_cellculture_simulation.data_models.reactor import (
+    CO2_SOLUBILITY,
+    DRY_GAS_PRESSURE,
+)
 
 
 # At most two lactate per glucose (glycolysis stoichiometry)
 MAX_LACTATE_PER_GLUCOSE = 2.0
+# Oxygen fraction of air
+AIR_O2_FRACTION = 0.21
 
 
 class MammalianCellcultureReactor:
@@ -77,6 +83,7 @@ class MammalianCellcultureReactor:
         current_time = 0.0
         current_y = recipe.initial_conditions.as_list()
         temperature, ph_value = recipe.temperature, recipe.ph_value
+        stirring_rate = recipe.stirring_rate
         solutions = ReactionEvolutionTimeseries(name=recipe.name)
         for feeding_event in recipe.feeding_strategy:
             partial_solution, current_time = self._calculate_partial_solution(
@@ -86,16 +93,20 @@ class MammalianCellcultureReactor:
                 recipe,
                 temperature,
                 ph_value,
+                stirring_rate,
             )
             solutions.extend(partial_solution)
             current_y = self._update_conditions_with_feed(
                 partial_solution, feeding_event
             )
-            # A feeding event may also shift the temperature and/or pH setpoint
+            # A feeding event may also shift the temperature, pH and/or
+            # stirring setpoints
             if feeding_event.temperature is not None:
                 temperature = feeding_event.temperature
             if feeding_event.ph_value is not None:
                 ph_value = feeding_event.ph_value
+            if feeding_event.stirring_rate is not None:
+                stirring_rate = feeding_event.stirring_rate
         partial_solution, current_time = self._calculate_partial_solution(
             current_time,
             recipe.runtime,
@@ -103,6 +114,7 @@ class MammalianCellcultureReactor:
             recipe,
             temperature,
             ph_value,
+            stirring_rate,
         )
         solutions.extend(partial_solution)
         return solutions
@@ -115,6 +127,7 @@ class MammalianCellcultureReactor:
         recipe: MammalianRecipe,
         temperature: float,
         ph_value: float,
+        stirring_rate: float,
     ):
         time_segment = (start_time, end_time)
         n_measurements = int((end_time - start_time) / recipe.measurement_intervals)
@@ -124,11 +137,24 @@ class MammalianCellcultureReactor:
             t_span=time_segment,
             y0=current_y,
             t_eval=measurement_times,
-            method="RK45",
-            args=(recipe, temperature, ph_value),
+            # Stiff: dissolved oxygen equilibrates within minutes
+            method="LSODA",
+            rtol=1e-6,
+            atol=1e-12,
+            args=(recipe, temperature, ph_value, stirring_rate),
         )
         current_time = end_time
         purity = self._calculate_purity(solution)
+        o2_fraction = np.array(
+            [
+                self._gas_o2_fraction(
+                    stirring_rate,
+                    self._oxygen_uptake(state, recipe, temperature),
+                    recipe.do_setpoint,
+                )
+                for state in solution.y.T
+            ]
+        )
         partial_solution = ReactionEvolutionTimeseries(
             name=recipe.name,
             timepoints=solution.t,
@@ -143,6 +169,9 @@ class MammalianCellcultureReactor:
             c_aggregates=solution.y[8],
             c_glycated=solution.y[9],
             c_hcp=solution.y[10],
+            c_o2=solution.y[11],
+            c_co2=solution.y[12],
+            o2_fraction=o2_fraction,
             purity=purity,
         )
         return partial_solution, current_time
@@ -168,21 +197,47 @@ class MammalianCellcultureReactor:
             partial_solution.c_aggregates[-1],  # Aggregates not fed
             partial_solution.c_glycated[-1],  # Glycated product not fed
             partial_solution.c_hcp[-1],  # Host cell protein not fed
+            partial_solution.c_o2[-1] + feeding_event.feed_concentrations.c_o2,
+            partial_solution.c_co2[-1] + feeding_event.feed_concentrations.c_co2,
         ]
         return [value / dilution for value in final_conditions]
 
     def _ode_system(
-        self, _, x, recipe: MammalianRecipe, temperature: float, ph_value: float
+        self,
+        _,
+        x,
+        recipe: MammalianRecipe,
+        temperature: float,
+        ph_value: float,
+        stirring_rate: float,
     ):
         # x_* here is the cell density and c_* the concentrations of the metabolites
-        _, _, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia, _, _, _ = x
-        current_growth_rate = self._calculate_growth_rate(
-            c_glc, c_gln, c_lac, c_ammonia, recipe, temperature, ph_value
+        (_, _, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia, _, _, _, c_o2, c_co2) = x
+        # Dissolved oxygen limits growth and production
+        c_o2_pos = max(c_o2, 0.0)
+        oxygen_factor = c_o2_pos / (recipe.celltype.k_sat_o2 + c_o2_pos)
+        # Dissolved CO2 inhibits growth and production
+        c_co2_pos = max(c_co2, 0.0)
+        pco2 = c_co2_pos / CO2_SOLUBILITY
+        co2_factor = 1.0 / (1.0 + (pco2 / recipe.celltype.pco2_crit) ** 3)
+        # Poor mixing: cells pass through zones of concentrated feed and base
+        # and of low oxygen, which slows growth and kills cells
+        gradients = (
+            self.reactor_type.mixing_time(stirring_rate) / recipe.celltype.t_mix_crit
+        ) ** 2
+        current_growth_rate = (
+            self._calculate_growth_rate(
+                c_glc, c_gln, c_lac, c_ammonia, recipe, temperature, ph_value
+            )
+            * oxygen_factor
+            * co2_factor
+            / (1.0 + gradients)
         )
         c_lac_pos = max(c_lac, 0.0)
         c_ammonia_pos = max(c_ammonia, 0.0)
-        # Lactate (acidification/osmolality), ammonia and conditions far from
-        # the growth optima (temperature/pH stress) raise the death rate
+        # Lactate (acidification/osmolality), ammonia, conditions far from
+        # the growth optima (temperature/pH stress), shear near the impeller
+        # and poor mixing raise the death rate
         condition_stress = max(
             0.0, 1.0 - self._calculate_growth_conditions(recipe, temperature, ph_value)
         )
@@ -191,6 +246,12 @@ class MammalianCellcultureReactor:
             + c_lac_pos / recipe.celltype.k_death_lac
             + c_ammonia_pos / recipe.celltype.k_death_ammonia
             + recipe.celltype.k_death_stress * condition_stress
+            + (
+                self.reactor_type.max_dissipation(stirring_rate)
+                / recipe.celltype.eps_crit
+            )
+            ** 2
+            + gradients
         )
         k_death = (
             recipe.celltype.k_death_max
@@ -250,6 +311,8 @@ class MammalianCellcultureReactor:
             * product_ph_factor
             * glc_limitation
             * gln_limitation
+            * oxygen_factor
+            * co2_factor
             * lactate_product_inhibition
             * ammonia_product_inhibition
         )
@@ -264,9 +327,8 @@ class MammalianCellcultureReactor:
 
         # Metabolism slows at lower temperature (mild hypothermia):
         # maintenance and lactate formation scale with a Q10 factor
-        metabolism_factor = celltype.q10_metabolism ** (
-            (temperature - celltype.t_ref_metabolism) / 10.0
-        )
+        metabolism_factor = self._metabolism_factor(recipe, temperature)
+        o2_uptake = celltype.q_o2 * x_viable * metabolism_factor * oxygen_factor
         c_glc_gradient = x_viable * (
             (-current_growth_rate / celltype.y_cells_glc)
             - celltype.m_glc * metabolism_factor
@@ -287,6 +349,8 @@ class MammalianCellcultureReactor:
             * max(
                 0.0, 1.0 + celltype.k_lactate_ph * (ph_value - celltype.ph_ref_lactate)
             )
+            # Lack of oxygen shifts metabolism towards glycolysis
+            * (1.0 + celltype.k_lactate_hypoxia * (1.0 - oxygen_factor))
             * metabolism_factor,
         )
         # When glucose runs low, cells switch to consuming lactate
@@ -322,7 +386,64 @@ class MammalianCellcultureReactor:
             product_glycation,
             # Host cell protein accumulates as dead cells lyse
             celltype.hcp_per_cell * celltype.k_lysis * x_dead,
+            # Oxygen: transfer from the sparged gas minus uptake by the cells;
+            # enriching the gas with oxygen raises its saturation concentration
+            self.reactor_type.kla(stirring_rate)
+            * (
+                self.reactor_type.o2_saturation
+                * self._gas_o2_fraction(stirring_rate, o2_uptake, recipe.do_setpoint)
+                / AIR_O2_FRACTION
+                - c_o2
+            )
+            - o2_uptake,
+            # CO2: produced with the respiratory quotient, stripped by the gas
+            celltype.respiratory_quotient * o2_uptake
+            - self.reactor_type.co2_stripping_rate(stirring_rate)
+            * (
+                c_co2
+                - self.reactor_type.gas_co2_fraction
+                * DRY_GAS_PRESSURE
+                * CO2_SOLUBILITY
+            ),
         ]
+
+    def _metabolism_factor(self, recipe: MammalianRecipe, temperature: float) -> float:
+        """Q10 factor for maintenance and lactate formation (1 at t_ref)."""
+        celltype = recipe.celltype
+        return celltype.q10_metabolism ** (
+            (temperature - celltype.t_ref_metabolism) / 10.0
+        )
+
+    def _oxygen_uptake(self, state, recipe: MammalianRecipe, temperature: float):
+        """Oxygen uptake rate of the culture [mM h^-1]."""
+        celltype = recipe.celltype
+        x_viable, c_o2 = max(state[2], 0.0), max(state[11], 0.0)
+        oxygen_factor = c_o2 / (celltype.k_sat_o2 + c_o2)
+        return (
+            celltype.q_o2
+            * x_viable
+            * self._metabolism_factor(recipe, temperature)
+            * oxygen_factor
+        )
+
+    def _gas_o2_fraction(
+        self, stirring_rate: float, o2_uptake: float, do_setpoint
+    ) -> float:
+        """Oxygen fraction of the sparged gas set by an ideal DO controller.
+
+        The controller picks the fraction at which oxygen transfer matches the
+        uptake with dissolved oxygen at the setpoint, so dissolved oxygen
+        relaxes to the setpoint at the rate kLa. It is bounded by air (0.21)
+        and pure oxygen (1.0); without a setpoint, air is sparged.
+        """
+        if do_setpoint is None:
+            return AIR_O2_FRACTION
+        saturation = self.reactor_type.o2_saturation
+        needed = do_setpoint * saturation + o2_uptake / self.reactor_type.kla(
+            stirring_rate
+        )
+        fraction = AIR_O2_FRACTION * needed / saturation
+        return float(np.clip(fraction, AIR_O2_FRACTION, 1.0))
 
     def _calculate_growth_rate(
         self,
@@ -568,6 +689,8 @@ class MammalianCellcultureReactor:
             ("c_aggregates", solution.c_aggregates),
             ("c_glycated", solution.c_glycated),
             ("c_hcp", solution.c_hcp),
+            ("c_o2", solution.c_o2),
+            ("c_co2", solution.c_co2),
         ]
 
         return [
@@ -655,6 +778,8 @@ class MammalianCellcultureReactor:
         solution.c_aggregates = np.clip(solution.c_aggregates, 0, None)
         solution.c_glycated = np.clip(solution.c_glycated, 0, None)
         solution.c_hcp = np.clip(solution.c_hcp, 0, None)
+        solution.c_o2 = np.clip(solution.c_o2, 0, None)
+        solution.c_co2 = np.clip(solution.c_co2, 0, None)
         # Purity is already clipped in _calculate_purity, but ensure it's in [0, 1]
         solution.purity = np.clip(solution.purity, 0, 1)
 

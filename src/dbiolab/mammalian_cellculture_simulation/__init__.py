@@ -11,6 +11,12 @@ from .data_models import (
 )
 from .cellculture_simulator import MammalianCellcultureReactor
 from .visualization import plot_reaction_evolution_timeseries, plot_setpoints
+from .scale_library import (
+    REACTOR_SCALES,
+    sample_celltypes,
+    sample_reactor,
+    stirring_range,
+)
 
 
 __all__ = [
@@ -24,4 +30,8 @@ __all__ = [
     "plot_setpoints",
     "ReactionEvolutionTimeseries",
     "ReactorType",
+    "REACTOR_SCALES",
+    "sample_celltypes",
+    "sample_reactor",
+    "stirring_range",
 ]
