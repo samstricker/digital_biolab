@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bioreactor Operator Station</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.0/plotly.min.js"></script>
+<style>
+  :root {
+    --bg: #12171d;
+    --panel: #1a2129;
+    --panel-2: #212a34;
+    --line: #2d3946;
+    --text: #d7dee6;
+    --muted: #8492a3;
+    --accent: #3fb6e8;
+    --pv: #e8edf2;
+    --sp: #8a99aa;
+    --ok: #39c27a;
+    --warn: #f2b33d;
+    --alarm: #f0524f;
+    --feed: #b48cf2;
+    --mono: "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+    --sans: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 18px; padding: 8px 16px;
+    background: linear-gradient(#1d252e, #171d24); border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: .04em; }
+  .brand .logo { width: 22px; height: 22px; border-radius: 5px; background: conic-gradient(var(--accent), #2a7fb0, var(--accent)); }
+  .brand small { display: block; color: var(--muted); font-weight: 400; letter-spacing: 0; font-size: 11px; }
+  .unit-tag { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent); padding: 2px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+  .topbar .field { display: flex; flex-direction: column; gap: 2px; }
+  .topbar .field label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .topbar .field .val { font-family: var(--mono); font-size: 15px; }
+  select {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 4px;
+    padding: 6px 28px 6px 10px; font: inherit; font-size: 13px; min-width: 280px; cursor: pointer;
+  }
+  .spacer { flex: 1; }
+  .state { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-family: var(--mono); }
+  .state .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .state.done .dot { background: var(--muted); box-shadow: none; }
+  .alarm-badge {
+    font-family: var(--mono); font-weight: 700; padding: 4px 10px; border-radius: 4px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+  }
+  .alarm-badge.active { background: var(--alarm); color: #fff; border-color: var(--alarm); animation: blink 1.2s steps(2, start) infinite; }
+  .alarm-badge.warn { background: var(--warn); color: #1a1a1a; border-color: var(--warn); }
+  @keyframes blink { to { opacity: .55; } }
+
+  /* ---------- time bar ---------- */
+  .timebar { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .timebar button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 4px;
+    padding: 5px 12px; font: inherit; cursor: pointer; min-width: 64px;
+  }
+  .timebar button:hover { border-color: var(--accent); }
+  .timebar input[type=range] { flex: 1; accent-color: var(--accent); }
+  .timebar .clock { font-family: var(--mono); font-size: 15px; min-width: 190px; text-align: right; }
+  .timebar .speed { color: var(--muted); }
+
+  /* ---------- layout ---------- */
+  main { flex: 1; display: grid; grid-template-columns: 340px 1fr 340px; gap: 10px; padding: 10px; min-height: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; min-height: 0; }
+  .panel h2 {
+    margin: 0; padding: 7px 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--muted); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between;
+  }
+  .panel h2 span { color: var(--text); text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .col { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+
+  /* ---------- schematic ---------- */
+  #schematic svg { width: 100%; height: auto; display: block; }
+  .tagbox rect { fill: #0e1318; stroke: var(--line); }
+  .tagbox .name { fill: var(--muted); font: 600 9px var(--sans); letter-spacing: .06em; }
+  .tagbox .value { fill: var(--pv); font: 700 13px var(--mono); }
+  .tagbox .unit { fill: var(--muted); font: 10px var(--sans); }
+  .tagbox.alarm rect { stroke: var(--alarm); stroke-width: 2; }
+  .tagbox.alarm .value { fill: var(--alarm); }
+  .tagbox.warn rect { stroke: var(--warn); stroke-width: 2; }
+  .pipe { stroke: #4a5868; stroke-width: 3; fill: none; }
+  .pipe.active { stroke: var(--feed); }
+  .bubble { fill: #e6f4fb; opacity: 0; }
+  .drop { fill: #7fc3ec; opacity: 0; }
+  .blade.back { fill: #6f7c89; }
+  .blade.front { fill: #d5dde5; }
+
+  /* ---------- tag tiles ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; padding: 10px; }
+  .tile { background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--ok); border-radius: 4px; padding: 7px 9px; }
+  .tile.warn { border-left-color: var(--warn); }
+  .tile.alarm { border-left-color: var(--alarm); background: #2a1e22; }
+  .tile.offline { border-left-color: var(--accent); }
+  .tile .name { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; display: flex; justify-content: space-between; }
+  .tile .pv { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--pv); line-height: 1.25; }
+  .tile .pv small { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 3px; }
+  .tile .sp { font-family: var(--mono); font-size: 11px; color: var(--sp); }
+  .tile .bar { height: 4px; background: #0e1318; border-radius: 2px; margin-top: 5px; position: relative; overflow: hidden; }
+  .tile .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); }
+
+  /* ---------- trends ---------- */
+  .trends { flex: 1; display: grid; grid-template-rows: repeat(4, minmax(150px, 1fr)); gap: 0; padding: 4px 6px 6px; min-height: 0; }
+  .trend { min-height: 0; }
+
+  /* ---------- logs ---------- */
+  .log { overflow: auto; flex: 1; min-height: 120px; }
+  .log table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .log td { padding: 5px 8px; border-bottom: 1px solid #222b35; vertical-align: top; }
+  .log td.t { font-family: var(--mono); color: var(--muted); white-space: nowrap; }
+  .log tr.HIHI td.sev, .log tr.HIHI.active td { color: var(--alarm); }
+  .log tr.HI td.sev { color: var(--warn); }
+  .log tr.cleared td { color: var(--muted); }
+  .log td.sev { font-family: var(--mono); font-weight: 700; }
+  .log .kind { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+  .log .kind.feed { background: var(--feed); }
+  .log .kind.setpoint { background: var(--accent); }
+  .log .kind.start, .log .kind.end { background: var(--ok); }
+  .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; }
+  .kpi { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 7px 9px; }
+  .kpi .name { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+  .kpi .v { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--pv); }
+  .kpi .v small { font-size: 10px; color: var(--muted); font-weight: 400; margin-left: 3px; }
+  .empty { color: var(--muted); padding: 10px; font-style: italic; }
+  .info { padding: 10px; color: var(--muted); line-height: 1.5; font-size: 12px; }
+  .info b { color: var(--text); font-weight: 600; }
+  .phase { display: inline-block; padding: 2px 8px; border-radius: 3px; background: var(--panel-2); border: 1px solid var(--line); font-family: var(--mono); }
+
+  @media (max-width: 1300px) {
+    main { grid-template-columns: 1fr; }
+    .tiles { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><div class="logo"></div><div>Bioreactor Operator Station<small>digital biolab · simulated process</small></div></div>
+  <div class="unit-tag" id="unitTag">BR-201</div>
+  <div class="field"><label>Run</label><select id="runSelect"></select></div>
+  <div class="field"><label>Phase</label><div class="val"><span class="phase" id="phase">–</span></div></div>
+  <div class="spacer"></div>
+  <div class="field"><label>Batch state</label><div class="state" id="state"><span class="dot"></span><span id="stateText">RUNNING</span></div></div>
+  <div class="field"><label>Alarms</label><div class="alarm-badge" id="alarmBadge">0 ACTIVE</div></div>
+</header>
+
+<div class="timebar">
+  <button id="playBtn">▶ Play</button>
+  <button id="liveBtn">⏭ End</button>
+  <input type="range" id="timeSlider" min="0" max="336" step="1" value="336">
+  <span class="speed">speed</span>
+  <select id="speed" style="min-width:auto">
+    <option value="2">2 h/s</option>
+    <option value="6" selected>6 h/s</option>
+    <option value="24">1 d/s</option>
+  </select>
+  <div class="clock" id="clock">Day 14 · 00:00 h</div>
+</div>
+
+<main>
+  <div class="col">
+    <section class="panel" id="schematic">
+      <h2>Vessel <span id="vesselName">–</span></h2>
+      <svg viewBox="-40 0 380 330" aria-label="Bioreactor schematic">
+        <defs>
+          <linearGradient id="liquid" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#d0a24a"/><stop offset="1" stop-color="#8f6a26"/></linearGradient>
+          <linearGradient id="steel" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#4b5662"/><stop offset=".45" stop-color="#8794a1"/><stop offset="1" stop-color="#3f4954"/></linearGradient>
+          <linearGradient id="steelInner" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#2a323b"/><stop offset=".5" stop-color="#3a444f"/><stop offset="1" stop-color="#262d35"/></linearGradient>
+          <clipPath id="vesselClip"><path id="clipShape" d=""/></clipPath>
+        </defs>
+        <!-- vessel art, generated per vessel type (micro, glass, steel) -->
+        <g id="vesselArt"></g>
+        <!-- feed pump -->
+        <text x="215" y="30" fill="#8492a3" font-size="9">FEED</text>
+        <g id="pump"><circle cx="255" cy="40" r="10" fill="#0e1318" stroke="#4a5868" stroke-width="2" id="pumpBody"/><g id="pumpRotor"><line x1="255" y1="32" x2="255" y2="48" stroke="#4a5868" stroke-width="2.5" stroke-linecap="round"/><line x1="247" y1="40" x2="263" y2="40" stroke="#4a5868" stroke-width="2.5" stroke-linecap="round"/></g></g>
+        <text x="232" y="62" fill="#8492a3" font-size="8" id="pumpLabel">P-108</text>
+        <text x="40" y="22" fill="#8492a3" font-size="9">EXHAUST</text>
+        <text x="-30" y="318" fill="#8492a3" font-size="9" id="gasLabel">GAS IN</text>
+        <!-- tag boxes -->
+        <g class="tagbox" id="tb-temp" transform="translate(-34,92)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">TIC-101</text><text class="value" x="6" y="29" id="tv-temp">–</text><text class="unit" x="60" y="29">°C</text></g>
+        <g class="tagbox" id="tb-ph" transform="translate(-34,140)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">pHIC-102</text><text class="value" x="6" y="29" id="tv-ph">–</text></g>
+        <g class="tagbox" id="tb-do" transform="translate(262,92)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">DOIC-103</text><text class="value" x="6" y="29" id="tv-do">–</text><text class="unit" x="58" y="29">%</text></g>
+        <g class="tagbox" id="tb-co2" transform="translate(262,140)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">AI-104 pCO2</text><text class="value" x="6" y="29" id="tv-co2">–</text><text class="unit" x="46" y="29">mmHg</text></g>
+        <g class="tagbox" id="tb-rpm" transform="translate(262,236)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">SIC-105 AGIT</text><text class="value" x="6" y="29" id="tv-rpm">–</text><text class="unit" x="54" y="29">rpm</text></g>
+        <g class="tagbox" id="tb-gas" transform="translate(-34,236)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">FIC-106 O2</text><text class="value" x="6" y="29" id="tv-gas">–</text><text class="unit" x="58" y="29">%</text></g>
+        <g class="tagbox" id="tb-vol" transform="translate(262,188)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">WI-107 VOL</text><text class="value" x="6" y="29" id="tv-vol">–</text><text class="unit" x="58" y="29" id="tu-vol">L</text></g>
+      </svg>
+    </section>
+    <section class="panel">
+      <h2>Unit information</h2>
+      <div class="info" id="unitInfo"></div>
+    </section>
+    <section class="panel" style="flex:1">
+      <h2>Batch KPIs <span>up to cursor</span></h2>
+      <div class="kpis" id="kpis"></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="panel">
+      <h2>Process values <span>PV · SP</span></h2>
+      <div class="tiles" id="tiles"></div>
+    </section>
+    <section class="panel" style="flex:1">
+      <h2>Trends <span>solid: process value · dashed: setpoint · ◆ offline sample · ┊ feed</span></h2>
+      <div class="trends">
+        <div class="trend" id="trendEnv"></div>
+        <div class="trend" id="trendGas"></div>
+        <div class="trend" id="trendCells"></div>
+        <div class="trend" id="trendMet"></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="panel" style="flex:0.8">
+      <h2>Alarms <span id="alarmCount">–</span></h2>
+      <div class="log" id="alarmLog"></div>
+    </section>
+    <section class="panel" style="flex:1.4">
+      <h2>Event journal</h2>
+      <div class="log" id="eventLog"></div>
+    </section>
+    <section class="panel">
+      <h2>Product <span>titer</span></h2>
+      <div class="trend" id="trendTiter" style="height:170px"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const RUNS = __RUN_DATA__;
+
+const $ = (id) => document.getElementById(id);
+const css = getComputedStyle(document.documentElement);
+const C = (name) => css.getPropertyValue(name).trim();
+let run = RUNS[0];
+let tIndex = 0;
+let playing = null;
+
+// ---------- helpers ----------
+function fmtClock(h) {
+  const day = Math.floor(h / 24), rest = h - 24 * day;
+  const hh = String(Math.floor(rest)).padStart(2, "0"), mm = String(Math.round((rest % 1) * 60)).padStart(2, "0");
+  return `Day ${day} · ${hh}:${mm} h`;
+}
+function fmtT(h) { return `D${Math.floor(h / 24)} ${String(Math.floor(h % 24)).padStart(2, "0")}:00`; }
+function lastOffline(key, t) {
+  let v = null, at = null;
+  run.offline.t.forEach((ts, i) => { if (ts <= t && run.offline[key][i] !== null) { v = run.offline[key][i]; at = ts; } });
+  return { v, at };
+}
+function phaseAt(t) {
+  const feeds = run.events.filter((e) => e.kind === "feed" && e.t <= t);
+  if (t >= run.runtime) return "HARVEST";
+  if (feeds.length === 0) return "BATCH";
+  const tempSp = run.sp.temp[tIndex], firstSp = run.sp.temp[0];
+  return tempSp < firstSp - 1.5 ? `PRODUCTION · FED ${feeds.length}` : `GROWTH · FED ${feeds.length}`;
+}
+function activeAlarms(t) { return run.alarms.filter((a) => a.start <= t && (a.end === null || a.end > t)); }
+function alarmFor(tag, t) {
+  const act = activeAlarms(t).filter((a) => a.tag === tag);
+  if (act.some((a) => a.severity === "HIHI")) return "alarm";
+  if (act.length) return "warn";
+  return "";
+}
+
+// ---------- tiles ----------
+const TILES = [
+  { key: "temp", name: "Temperature", tag: "TEMP", unit: "°C", d: 2, pv: () => run.pv.temp[tIndex], sp: () => run.sp.temp[tIndex], range: [30, 40] },
+  { key: "ph", name: "pH", tag: "PH", unit: "", d: 2, pv: () => run.pv.ph[tIndex], sp: () => run.sp.ph[tIndex], range: [6.5, 7.6] },
+  { key: "do", name: "Dissolved O2", tag: "DO", unit: "%", d: 0, pv: () => run.pv.do[tIndex], sp: () => run.sp.do, range: [0, 120] },
+  { key: "rpm", name: "Agitation", tag: "AGIT", unit: "rpm", d: 0, pv: () => run.pv.rpm[tIndex], sp: () => run.sp.rpm[tIndex], range: [0, Math.max(...run.sp.rpm) * 1.3] },
+  { key: "gas", name: "Gas O2", tag: "GASO2", unit: "%", d: 0, mode: () => (run.sp.do === null ? "MAN" : "CASC"), note: () => (run.sp.do === null ? "air only" : "output of DO loop"), pv: () => run.pv.gas_o2[tIndex], sp: () => null, range: [0, 100] },
+  { key: "pco2", name: "pCO2", tag: "pCO2", unit: "mmHg", d: 0, mode: () => "MON", note: () => "alarm > 80 mmHg", pv: () => run.pv.pco2[tIndex], sp: () => null, range: [0, 150] },
+  { key: "vcd", name: "Viable cells", tag: "VCD", unit: "e6/mL", d: 2, offline: "vcd", range: [0, 20] },
+  { key: "via", name: "Viability", tag: "VIA", unit: "%", d: 1, offline: "via", range: [0, 100] },
+  { key: "glc", name: "Glucose", tag: "GLC", unit: "mM", d: 1, offline: "glc", range: [0, 30] },
+  { key: "lac", name: "Lactate", tag: "LAC", unit: "mM", d: 1, offline: "lac", range: [0, 50] },
+  { key: "nh4", name: "Ammonia", tag: "NH4", unit: "mM", d: 2, offline: "nh4", range: [0, 10] },
+  { key: "titer", name: "Titer", tag: "TITER", unit: "g/L", d: 2, offline: "titer", range: [0, 10] },
+];
+function buildTiles() {
+  $("tiles").innerHTML = TILES.map((t) => `
+    <div class="tile" id="tile-${t.key}">
+      <div class="name"><span>${t.name}</span><span id="tt-${t.key}"></span></div>
+      <div class="pv" id="tpv-${t.key}">–</div>
+      <div class="sp" id="tsp-${t.key}">&nbsp;</div>
+      <div class="bar"><i id="tbar-${t.key}"></i></div>
+    </div>`).join("");
+}
+function updateTiles(t) {
+  for (const tile of TILES) {
+    let value, sub;
+    if (tile.offline) {
+      const s = lastOffline(tile.offline, t);
+      value = s.v;
+      sub = s.at === null ? "no sample yet" : `sample ${fmtT(s.at)}`;
+      $(`tile-${tile.key}`).className = "tile offline " + alarmFor(tile.tag, t);
+      $(`tt-${tile.key}`).textContent = "OFFLINE";
+    } else {
+      value = tile.pv();
+      const sp = tile.sp();
+      sub = sp === null || sp === undefined ? (tile.note ? tile.note() : "SP –") : `SP ${Number(sp).toFixed(tile.d)} ${tile.unit}`;
+      if (tile.key === "do" && sp !== null && value > sp + 5) sub += " · air sufficient";
+      if (tile.key === "do" && sp === null) sub = "SP – · air only";
+      $(`tile-${tile.key}`).className = "tile " + alarmFor(tile.tag, t);
+      $(`tt-${tile.key}`).textContent = tile.mode ? tile.mode() : (tile.key === "do" && run.sp.do === null ? "MAN" : "AUTO");
+    }
+    $(`tpv-${tile.key}`).innerHTML = value === null ? "–" : `${Number(value).toFixed(tile.d)}<small>${tile.unit}</small>`;
+    $(`tsp-${tile.key}`).textContent = sub;
+    const [lo, hi] = tile.range;
+    const pct = value === null ? 0 : Math.max(0, Math.min(100, (100 * (value - lo)) / (hi - lo)));
+    $(`tbar-${tile.key}`).style.width = `${pct}%`;
+  }
+}
+
+// ---------- schematic ----------
+const SVGNS = "http://www.w3.org/2000/svg";
+const N_BUBBLES = 40, N_DROPS = 10;
+
+// Vessel geometries (SVG units). inner: liquid region; fill0: liquid height
+// fraction at the starting volume; impellers: height and blade length.
+const VESSELS = {
+  micro: {
+    label: "single-use mini bioreactor",
+    inner: { x: 112, y: 104, w: 76, h: 172 }, fill0: 0.7,
+    clip: "M112 104 H188 V262 Q188 276 174 276 H126 Q112 276 112 262 Z",
+    shaftTop: 76, impellers: [{ y: 246, blade: 17 }],
+    sparger: { x0: 124, x1: 134, y: 266, inlet: 129 }, feedX: 172, exhaustX: 160,
+  },
+  glass: {
+    label: "glass bench-top vessel",
+    inner: { x: 70, y: 70, w: 160, h: 210 }, fill0: 0.68,
+    clip: "M70 92 Q70 70 92 70 H208 Q230 70 230 92 V258 Q230 280 208 280 H92 Q70 280 70 258 Z",
+    shaftTop: 40, impellers: [{ y: 211, blade: 26 }],
+    sparger: { x0: 84, x1: 116, y: 262, inlet: 95 }, feedX: 210, exhaustX: 110,
+  },
+  steel: {
+    label: "stainless-steel production tank",
+    inner: { x: 66, y: 70, w: 168, h: 222 }, fill0: 0.72,
+    clip: "M66 86 Q66 68 150 64 Q234 68 234 86 V268 Q234 290 150 294 Q66 290 66 268 Z",
+    shaftTop: 24, impellers: [{ y: 178, blade: 34 }, { y: 246, blade: 34 }],
+    sparger: { x0: 122, x1: 178, y: 280, inlet: 150 }, feedX: 205, exhaustX: 112,
+  },
+};
+const vesselType = (volumeL) => (volumeL < 1 ? "micro" : volumeL <= 20 ? "glass" : "steel");
+let G = VESSELS.glass;
+let impellerAngle = 0, pumpAngle = 0, lastFrame = performance.now();
+let feedAnimUntil = 0, lastT = null;
+
+function impellerSvg(i, imp) {
+  return `<g><g id="bladesBack${i}"></g><rect x="145" y="${imp.y - 4}" width="10" height="16" rx="2" fill="#c3ccd5"/><g id="bladesFront${i}"></g></g>`;
+}
+
+function renderVessel(type) {
+  G = VESSELS[type];
+  const { inner, sparger, feedX, exhaustX, impellers } = G;
+  const lowest = Math.max(...impellers.map((imp) => imp.y)) + 12;
+  const pipes = `
+    <path class="pipe" d="M${exhaustX} ${inner.y} V30 H40" />
+    <path class="pipe" id="feedPipe" d="M280 40 H${feedX} V${inner.y}" />`;
+  const liquid = `
+    <g clip-path="url(#vesselClip)">
+      <rect id="liquidRect" x="${inner.x}" y="${inner.y + inner.h / 3}" width="${inner.w}" height="${inner.h}" fill="url(#liquid)" opacity=".85"/>
+      <g id="bubbles"></g><g id="drops"></g>
+      <ellipse id="ripple" cx="${feedX}" cy="130" rx="0" ry="0" fill="none" stroke="#e8d3a0" stroke-width="1.2" opacity="0"/>
+    </g>`;
+  const shaft = `<line x1="150" y1="${G.shaftTop}" x2="150" y2="${lowest}" stroke="#b9c4cf" stroke-width="${type === "steel" ? 4 : 3}"/>`;
+  const impellerArt = impellers.map((imp, i) => impellerSvg(i, imp)).join("");
+  let art = "";
+  if (type === "micro") {
+    const ghost = (x) => `<g opacity=".22"><rect x="${x}" y="104" width="40" height="172" rx="8" fill="#9fd0e8" fill-opacity=".15" stroke="#9fd0e8" stroke-width="1.5"/><rect x="${x - 3}" y="94" width="46" height="10" rx="2" fill="#7f8d9b"/><rect x="${x}" y="190" width="40" height="86" rx="6" fill="#c9a35a" fill-opacity=".5"/></g>`;
+    art = `
+      <rect x="20" y="282" width="260" height="10" rx="2" fill="#3a4550"/>
+      <text x="24" y="303" fill="#8492a3" font-size="8">STATION · 24 POSITIONS · POS 12</text>
+      ${ghost(56)}${ghost(204)}
+      ${pipes}
+      <path class="pipe" d="M-30 300 H20" /><path class="pipe" d="M${sparger.inlet} 92 V${sparger.y}" style="stroke-width:2"/>
+      <path d="M112 104 H188 V262 Q188 276 174 276 H126 Q112 276 112 262 Z" fill="#9fd0e8" fill-opacity=".08"/>
+      ${liquid}
+      <path d="M112 104 H188 V262 Q188 276 174 276 H126 Q112 276 112 262 Z" fill="none" stroke="#a9dcf2" stroke-width="2"/>
+      <rect x="106" y="92" width="88" height="14" rx="3" fill="#7f8d9b"/>
+      <rect x="140" y="64" width="20" height="14" rx="2" fill="#5d6977"/><text x="164" y="74" fill="#8492a3" font-size="7">DRIVE</text>
+      ${shaft}${impellerArt}
+      <circle cx="117" cy="226" r="3.5" fill="#f2b33d" opacity=".9"/><circle cx="117" cy="240" r="3.5" fill="#39c27a" opacity=".9"/>
+      <text x="76" y="229" fill="#8492a3" font-size="7">pH spot</text><text x="76" y="243" fill="#8492a3" font-size="7">DO spot</text>`;
+  } else if (type === "glass") {
+    art = `
+      ${pipes}
+      <path class="pipe" d="M-30 300 H${sparger.inlet} V${sparger.y + 6}" />
+      ${liquid}
+      <path d="${G.clip}" fill="none" stroke="#9aa8b6" stroke-width="2.5"/>
+      <rect x="64" y="64" width="172" height="10" rx="3" fill="#6b7886"/>
+      <rect x="138" y="30" width="24" height="14" rx="2" fill="#6b7886"/>
+      ${shaft}${impellerArt}
+      <rect x="${sparger.x0 - 4}" y="${sparger.y}" width="${sparger.x1 - sparger.x0 + 8}" height="6" rx="3" fill="#6b7886"/>
+      <line x1="190" y1="70" x2="190" y2="190" stroke="#c9d3dc" stroke-width="2"/>
+      <line x1="205" y1="70" x2="205" y2="175" stroke="#c9d3dc" stroke-width="2"/>
+      <line x1="95" y1="70" x2="95" y2="180" stroke="#c9d3dc" stroke-width="2"/>`;
+  } else {
+    art = `
+      <line x1="80" y1="288" x2="70" y2="322" stroke="#5d6977" stroke-width="5"/>
+      <line x1="220" y1="288" x2="230" y2="322" stroke="#5d6977" stroke-width="5"/>
+      <line x1="150" y1="296" x2="150" y2="322" stroke="#5d6977" stroke-width="5"/>
+      ${pipes}
+      <path class="pipe" d="M-30 300 H40 V286 H${sparger.inlet - 34}" />
+      <path d="${G.clip}" fill="url(#steelInner)"/>
+      ${liquid}
+      <path d="M66 120 H58 V262 H66 M234 120 H242 V262 H234" fill="none" stroke="#6b7886" stroke-width="2" stroke-dasharray="4 3"/>
+      <path d="${G.clip}" fill="none" stroke="url(#steel)" stroke-width="7"/>
+      <ellipse cx="100" cy="66" rx="14" ry="5" fill="#6b7886" stroke="#8794a1"/>
+      <rect x="132" y="34" width="36" height="22" rx="3" fill="#6b7886"/><rect x="138" y="10" width="24" height="24" rx="3" fill="#5d6977"/>
+      <text x="170" y="26" fill="#8492a3" font-size="7">GEARBOX</text>
+      ${shaft}${impellerArt}
+      <ellipse cx="150" cy="${sparger.y + 2}" rx="${(sparger.x1 - sparger.x0) / 2}" ry="4" fill="none" stroke="#8794a1" stroke-width="3"/>
+      <line x1="66" y1="150" x2="96" y2="165" stroke="#c9d3dc" stroke-width="3"/>
+      <line x1="66" y1="200" x2="96" y2="212" stroke="#c9d3dc" stroke-width="3"/>
+      <line x1="234" y1="150" x2="206" y2="165" stroke="#c9d3dc" stroke-width="3"/>`;
+  }
+  $("vesselArt").innerHTML = art;
+  $("clipShape").setAttribute("d", G.clip);
+  buildAnimationLayers();
+}
+
+function liquidTop() { return parseFloat($("liquidRect").getAttribute("y")); }
+function harvested() { return run.time[tIndex] >= run.runtime; }
+// Sparger: bubbles scale with the gas flow (vvm); none after harvest.
+function activeBubbles() {
+  if (harvested()) return 0;
+  const vvm = run.unit.gas_vvm || 0;
+  return vvm <= 0 ? 0 : Math.round(Math.min(N_BUBBLES, 6 + 34 * Math.sqrt(vvm / 0.1)));
+}
+// Feed: drops while the cursor is within 2 h after a feed, and for 2.5 s
+// whenever playback passes a feed.
+function feeding(now) {
+  const t = run.time[tIndex];
+  return now < feedAnimUntil || run.events.some((e) => e.kind === "feed" && t >= e.t && t < e.t + 2);
+}
+
+function drawImpellers() {
+  // Three blades seen from the side: each spans from the hub to its
+  // projection; blades facing us are drawn bright in front of the hub.
+  G.impellers.forEach((imp, i) => {
+    let back = "", front = "";
+    for (let k = 0; k < 3; k++) {
+      const phi = ((impellerAngle + 120 * k + 40 * i) * Math.PI) / 180;
+      const x = imp.blade * Math.cos(phi), depth = Math.sin(phi);
+      const rect = `<rect class="blade ${depth >= 0 ? "front" : "back"}" x="${Math.min(150, 150 + x).toFixed(1)}" y="${imp.y}" width="${Math.abs(x).toFixed(1)}" height="8" rx="1.5"/>`;
+      if (depth >= 0) front += rect; else back += rect;
+    }
+    $(`bladesBack${i}`).innerHTML = back;
+    $(`bladesFront${i}`).innerHTML = front;
+  });
+}
+
+function animate(now) {
+  const dt = Math.min(0.1, (now - lastFrame) / 1000); lastFrame = now;
+  const rpm = harvested() ? 0 : run.pv.rpm[tIndex] || 0;
+  // Turn rate follows the stirring rate, slowed (and capped) for the eye;
+  // no movement when the agitator is off
+  impellerAngle = (impellerAngle + Math.min(2.5, rpm / 150) * 360 * dt) % 360;
+  drawImpellers();
+
+  const top = liquidTop();
+  const nBubbles = activeBubbles();
+  const o2 = Math.max(0, Math.min(1, (run.pv.gas_o2[tIndex] - 21) / 79));
+  const color = `rgb(${Math.round(230 - 120 * o2)},${Math.round(244 - 40 * o2)},251)`;
+  const sp = G.sparger, halfWidth = G.inner.w / 2 - 6;
+  document.querySelectorAll(".bubble").forEach((b, i) => {
+    if (i >= nBubbles) { b.style.opacity = 0; return; }
+    let y = b.y - b.speed * dt;
+    if (y < top + 3) { y = sp.y + Math.random() * 4; b.x0 = sp.x0 + Math.random() * (sp.x1 - sp.x0); }
+    b.y = y;
+    // the impeller disperses the bubbles above it
+    const above = Math.max(0, (sp.y - y) / (sp.y - top));
+    const swirl = Math.sin(now / 400 + b.phase) * Math.min(halfWidth, rpm / (G === VESSELS.steel ? 2 : 8)) * above;
+    const x = Math.max(G.inner.x + 4, Math.min(G.inner.x + G.inner.w - 4, b.x0 + swirl));
+    b.setAttribute("cx", x.toFixed(1));
+    b.setAttribute("cy", y.toFixed(1));
+    b.style.opacity = 0.7;
+    b.style.fill = color;
+  });
+
+  const isFeeding = feeding(now);
+  $("feedPipe").setAttribute("class", "pipe" + (isFeeding ? " active" : ""));
+  const pumpColor = isFeeding ? C("--feed") : "#4a5868";
+  $("pumpBody").setAttribute("stroke", pumpColor);
+  $("pumpRotor").querySelectorAll("line").forEach((l) => l.setAttribute("stroke", pumpColor));
+  if (isFeeding) pumpAngle = (pumpAngle + 540 * dt) % 360;
+  $("pumpRotor").setAttribute("transform", `rotate(${pumpAngle.toFixed(1)} 255 40)`);
+  const inlet = G.inner.y + 2;
+  document.querySelectorAll(".drop").forEach((d) => {
+    if (!isFeeding) { d.style.opacity = 0; d.y = inlet - Math.random() * 40; return; }
+    d.y += 160 * dt;
+    if (d.y > top) { d.y = inlet - Math.random() * 30; }
+    d.setAttribute("cy", d.y.toFixed(1));
+    d.style.opacity = d.y > inlet ? 0.9 : 0;
+  });
+  const ripple = $("ripple");
+  if (isFeeding) {
+    const r = (now / 8) % 22;
+    ripple.setAttribute("cy", top.toFixed(1));
+    ripple.setAttribute("rx", r.toFixed(1));
+    ripple.setAttribute("ry", (r / 4).toFixed(1));
+    ripple.setAttribute("opacity", (1 - r / 22).toFixed(2));
+  } else ripple.setAttribute("opacity", 0);
+  requestAnimationFrame(animate);
+}
+
+function buildAnimationLayers() {
+  const bubbles = $("bubbles"); bubbles.innerHTML = "";
+  const sp = G.sparger;
+  for (let i = 0; i < N_BUBBLES; i++) {
+    const c = document.createElementNS(SVGNS, "circle");
+    c.setAttribute("class", "bubble");
+    c.setAttribute("r", (1.2 + Math.random() * 1.8).toFixed(1));
+    c.x0 = sp.x0 + Math.random() * (sp.x1 - sp.x0);
+    c.y = G.inner.y + G.inner.h * (0.4 + 0.6 * Math.random());
+    c.speed = 35 + Math.random() * 30; c.phase = Math.random() * 6.28;
+    bubbles.appendChild(c);
+  }
+  const drops = $("drops"); drops.innerHTML = "";
+  for (let i = 0; i < N_DROPS; i++) {
+    const d = document.createElementNS(SVGNS, "ellipse");
+    d.setAttribute("class", "drop");
+    d.setAttribute("cx", (G.feedX - 1 + Math.random() * 2).toFixed(1));
+    d.setAttribute("rx", 1.6); d.setAttribute("ry", 2.6);
+    d.y = G.inner.y - Math.random() * 120;
+    drops.appendChild(d);
+  }
+}
+
+function updateSchematic(t) {
+  const v0 = run.unit.volume_L, v = run.pv.volume[tIndex];
+  const fill = Math.min(0.95, G.fill0 * v / v0);
+  const h = G.inner.h * fill;
+  $("liquidRect").setAttribute("y", G.inner.y + G.inner.h - h);
+  $("liquidRect").setAttribute("height", h);
+  const big = v0 >= 50;
+  $("tv-vol").textContent = big ? (v / 1000).toFixed(2) : v.toFixed(3);
+  $("tu-vol").textContent = big ? "m³" : "L";
+  $("tv-temp").textContent = run.pv.temp[tIndex].toFixed(1);
+  $("tv-ph").textContent = run.pv.ph[tIndex].toFixed(2);
+  $("tv-do").textContent = run.pv.do[tIndex].toFixed(0);
+  $("tv-co2").textContent = run.pv.pco2[tIndex].toFixed(0);
+  $("tv-rpm").textContent = harvested() ? "0" : run.pv.rpm[tIndex].toFixed(0);
+  $("tv-gas").textContent = run.pv.gas_o2[tIndex].toFixed(0);
+  $("gasLabel").textContent = harvested()
+    ? "GAS IN · OFF"
+    : `GAS IN · ${run.unit.gas_vvm.toFixed(3)} vvm · ${run.pv.gas_o2[tIndex] > 21.5 ? "AIR + O2" : "AIR"}`;
+  const set = (id, tag) => { $(id).setAttribute("class", "tagbox " + alarmFor(tag, t)); };
+  set("tb-temp", "TEMP"); set("tb-do", "DO"); set("tb-co2", "pCO2");
+  // Playback that passes a feed shows the feed for at least 2.5 s
+  if (lastT !== null && playing && run.events.some((e) => e.kind === "feed" && lastT < e.t && e.t <= t)) {
+    feedAnimUntil = performance.now() + 2500;
+  }
+  lastT = t;
+}
+
+// ---------- logs ----------
+function updateLogs(t) {
+  const alarms = run.alarms.filter((a) => a.start <= t);
+  const active = activeAlarms(t);
+  $("alarmCount").textContent = `${active.length} active · ${alarms.length} total`;
+  const badge = $("alarmBadge");
+  badge.textContent = `${active.length} ACTIVE`;
+  badge.className = "alarm-badge" + (active.some((a) => a.severity === "HIHI") ? " active" : active.length ? " warn" : "");
+  $("alarmLog").innerHTML = alarms.length === 0 ? '<div class="empty">No alarms</div>' :
+    `<table>${alarms.slice().reverse().map((a) => {
+      const isActive = a.end === null || a.end > t;
+      return `<tr class="${a.severity} ${isActive ? "active" : "cleared"}">
+        <td class="t">${fmtT(a.start)}</td><td class="sev">${a.severity}</td>
+        <td>${a.message}<br><span style="color:var(--muted)">${isActive ? "ACTIVE" : "cleared " + fmtT(a.end)}</span></td></tr>`;
+    }).join("")}</table>`;
+  const events = run.events.filter((e) => e.t <= t);
+  $("eventLog").innerHTML = `<table>${events.slice().reverse().map((e) =>
+    `<tr><td class="t">${fmtT(e.t)}</td><td><span class="kind ${e.kind}"></span>${e.text}</td></tr>`).join("")}</table>`;
+}
+
+// ---------- trends ----------
+const baseLayout = () => ({
+  paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "#141a20",
+  font: { color: C("--muted"), family: C("--sans"), size: 11 },
+  margin: { l: 52, r: 56, t: 22, b: 22 },
+  showlegend: true,
+  legend: { orientation: "h", x: 0, y: 1.18, font: { size: 10, color: C("--text") }, bgcolor: "rgba(0,0,0,0)" },
+  xaxis: { range: [0, run.runtime / 24], gridcolor: "#232d37", zeroline: false, ticksuffix: " d", dtick: 1 },
+  hovermode: "x unified",
+  hoverlabel: { bgcolor: "#1a2129", bordercolor: "#2d3946", font: { color: "#d7dee6" } },
+});
+function yAxis(title, extra = {}) { return Object.assign({ title: { text: title, font: { size: 10 } }, gridcolor: "#232d37", zeroline: false }, extra); }
+function shapes(t) {
+  const s = run.events.filter((e) => e.kind === "feed").map((e) => ({
+    type: "line", x0: e.t / 24, x1: e.t / 24, yref: "paper", y0: 0, y1: 1,
+    line: { color: C("--feed"), width: 1, dash: "dot" },
+  }));
+  s.push({ type: "rect", x0: t / 24, x1: run.runtime / 24, yref: "paper", y0: 0, y1: 1, fillcolor: "rgba(10,14,18,0.55)", line: { width: 0 } });
+  s.push({ type: "line", x0: t / 24, x1: t / 24, yref: "paper", y0: 0, y1: 1, line: { color: C("--accent"), width: 1.5 } });
+  return s;
+}
+const days = () => run.time.map((h) => h / 24);
+const upTo = (arr) => arr.map((v, i) => (run.time[i] <= run.time[tIndex] ? v : null));
+const offUpTo = (key, t) => run.offline.t.map((ts, i) => (ts <= t ? run.offline[key][i] : null));
+const offDays = () => run.offline.t.map((h) => h / 24);
+const line = (y, name, color, extra = {}) => Object.assign({ x: days(), y, name, type: "scatter", mode: "lines", line: { color, width: 1.6 } }, extra);
+const sp = (y, name, color, extra = {}) => line(y, name, color, Object.assign({ line: { color, width: 1.2, dash: "dash" } }, extra));
+const dots = (key, name, color, t, extra = {}) => Object.assign({ x: offDays(), y: offUpTo(key, t), name, type: "scatter", mode: "markers", marker: { color, size: 7, symbol: "diamond", line: { color: "#0e1318", width: 1 } } }, extra);
+
+function drawTrends() {
+  const t = run.time[tIndex];
+  const cfg = { displayModeBar: false, responsive: true };
+  const L = (y1, y2, bottom = false) => {
+    const layout = Object.assign(baseLayout(), { yaxis: y1, yaxis2: y2 && Object.assign({ overlaying: "y", side: "right" }, y2), shapes: shapes(t) });
+    layout.xaxis.showticklabels = bottom;
+    layout.margin.b = bottom ? 22 : 6;
+    return layout;
+  };
+
+  Plotly.react("trendEnv", [
+    line(upTo(run.pv.temp), "Temp PV", "#ff8a5c"), sp(run.sp.temp, "Temp SP", "#ff8a5c"),
+    line(upTo(run.pv.ph), "pH PV", "#7ad3ff", { yaxis: "y2" }), sp(run.sp.ph, "pH SP", "#7ad3ff", { yaxis: "y2" }),
+  ], L(yAxis("°C", { range: [30, 39] }), yAxis("pH", { range: [6.4, 7.6] })), cfg);
+
+  const doSp = run.sp.do === null ? [] : [sp(run.time.map(() => run.sp.do), "DO SP", "#39c27a")];
+  Plotly.react("trendGas", [
+    line(upTo(run.pv.do), "DO %", "#39c27a"), ...doSp,
+    line(upTo(run.pv.gas_o2), "Gas O2 %", "#a7e3a0", { line: { color: "#a7e3a0", width: 1 } }),
+    line(upTo(run.pv.pco2), "pCO2 mmHg", "#e0c35a"),
+    line(upTo(run.pv.rpm), "Agitation rpm", "#c9d3dc", { yaxis: "y2", line: { color: "#c9d3dc", width: 1.2 } }),
+  ], L(yAxis("% · mmHg", { range: [0, 130] }), yAxis("rpm", { rangemode: "tozero" })), cfg);
+
+  Plotly.react("trendCells", [
+    line(upTo(run.bio.vcd), "VCD model", "#3fb6e8", { line: { color: "rgba(63,182,232,.45)", width: 1.2 } }),
+    dots("vcd", "VCD 1e6/mL", "#3fb6e8", t),
+    line(upTo(run.bio.via), "Viability model", "#f2b33d", { yaxis: "y2", line: { color: "rgba(242,179,61,.45)", width: 1.2 } }),
+    dots("via", "Viability %", "#f2b33d", t, { yaxis: "y2" }),
+  ], L(yAxis("1e6 cells/mL", { rangemode: "tozero" }), yAxis("%", { range: [0, 105] })), cfg);
+
+  Plotly.react("trendMet", [
+    dots("glc", "Glucose", "#ff8a5c", t), line(upTo(run.bio.glc), "", "rgba(255,138,92,.4)", { showlegend: false, line: { color: "rgba(255,138,92,.4)", width: 1 } }),
+    dots("lac", "Lactate", "#e05ad3", t), line(upTo(run.bio.lac), "", "rgba(224,90,211,.4)", { showlegend: false, line: { color: "rgba(224,90,211,.4)", width: 1 } }),
+    dots("gln", "Glutamine", "#7ad3ff", t, { yaxis: "y2" }), line(upTo(run.bio.gln), "", "rgba(122,211,255,.4)", { yaxis: "y2", showlegend: false, line: { color: "rgba(122,211,255,.4)", width: 1 } }),
+    dots("nh4", "Ammonia", "#a7e3a0", t, { yaxis: "y2" }), line(upTo(run.bio.nh4), "", "rgba(167,227,160,.4)", { yaxis: "y2", showlegend: false, line: { color: "rgba(167,227,160,.4)", width: 1 } }),
+  ], L(yAxis("glc · lac mM", { rangemode: "tozero" }), yAxis("gln · NH4 mM", { rangemode: "tozero" }), true), cfg);
+
+  const titerLayout = Object.assign(baseLayout(), { yaxis: yAxis("g/L", { rangemode: "tozero" }), shapes: shapes(t), margin: { l: 44, r: 12, t: 16, b: 26 }, showlegend: false });
+  titerLayout.xaxis.dtick = 2;
+  Plotly.react("trendTiter", [
+    line(upTo(run.bio.titer), "Titer model", "#b48cf2", { line: { color: "rgba(180,140,242,.5)", width: 1.2 } }),
+    dots("titer", "Titer g/L", "#b48cf2", t),
+  ], titerLayout, cfg);
+}
+
+// ---------- KPIs ----------
+function updateKpis(t) {
+  let ivcd = 0, peak = 0;
+  for (let i = 1; i <= tIndex; i++) {
+    const dt = (run.time[i] - run.time[i - 1]) / 24;
+    ivcd += 0.5 * (run.bio.vcd[i] + run.bio.vcd[i - 1]) * dt;
+    peak = Math.max(peak, run.bio.vcd[i]);
+  }
+  const titer = run.bio.titer[tIndex];
+  // g/L over 1e6 cells/mL x day  ->  pg/cell/day
+  const qp = ivcd > 0 ? (titer * 1000) / ivcd : 0;
+  const feeds = run.events.filter((e) => e.kind === "feed" && e.t <= t).length;
+  const v0 = run.unit.volume_L, v = run.pv.volume[tIndex];
+  const big = v0 >= 50;
+  const items = [
+    ["Peak VCD", peak.toFixed(1), "e6/mL"],
+    ["IVCD", ivcd.toFixed(0), "e6·d/mL"],
+    ["Titer", titer.toFixed(2), "g/L"],
+    ["Specific productivity", qp.toFixed(0), "pg/cell/d"],
+    ["Viability", run.bio.via[tIndex].toFixed(0), "%"],
+    ["Purity", run.bio.purity[tIndex].toFixed(0), "%"],
+    ["Feeds given", `${feeds}/${run.events.filter((e) => e.kind === "feed").length}`, ""],
+    ["Volume added", big ? ((v - v0) / 1000).toFixed(2) : ((v - v0) * 1000).toFixed(0), big ? "m³" : "mL"],
+  ];
+  $("kpis").innerHTML = items.map(([n, val, u]) => `<div class="kpi"><div class="name">${n}</div><div class="v">${val}<small>${u}</small></div></div>`).join("");
+}
+
+// ---------- state ----------
+function update() {
+  const t = run.time[tIndex];
+  $("clock").textContent = fmtClock(t);
+  $("phase").textContent = phaseAt(t);
+  const done = t >= run.runtime;
+  $("state").className = "state" + (done ? " done" : "");
+  $("stateText").textContent = done ? "COMPLETE" : "RUNNING";
+  updateTiles(t); updateSchematic(t); updateLogs(t); updateKpis(t); drawTrends();
+}
+function selectRun(id) {
+  run = RUNS.find((r) => r.id === id);
+  $("unitTag").textContent = run.unit.tag;
+  $("vesselName").textContent = run.unit.name;
+  renderVessel(vesselType(run.unit.volume_L));
+  const vol = run.unit.volume_L >= 50 ? `${(run.unit.volume_L / 1000).toFixed(1)} m³` : run.unit.volume_L < 1 ? `${(run.unit.volume_L * 1000).toFixed(0)} mL` : `${run.unit.volume_L.toFixed(1)} L`;
+  $("unitInfo").innerHTML = `
+    <b>${run.label}</b><br>${run.description}<br><br>
+    Working volume <b>${vol}</b> · tank Ø <b>${run.unit.tank_diameter_m.toFixed(2)} m</b><br>
+    Mixing time at start <b>${run.unit.mixing_time_s} s</b><br>
+    DO control <b>${run.unit.do_setpoint_pct === null ? "off (air only)" : run.unit.do_setpoint_pct + " % air sat., O2 enrichment"}</b><br>
+    Data <b>${run.unit.noise}</b>`;
+  $("timeSlider").max = run.time.length - 1;
+  tIndex = 0;  // start of the batch
+  $("timeSlider").value = tIndex;
+  update();
+}
+
+// ---------- controls ----------
+$("runSelect").innerHTML = RUNS.map((r) => `<option value="${r.id}">${r.unit.tag} — ${r.label}</option>`).join("");
+$("runSelect").addEventListener("change", (e) => { stop(); selectRun(e.target.value); });
+$("timeSlider").addEventListener("input", (e) => { tIndex = Number(e.target.value); update(); });
+function stop() { if (playing) { clearInterval(playing); playing = null; $("playBtn").textContent = "▶ Play"; } }
+$("playBtn").addEventListener("click", () => {
+  if (playing) return stop();
+  if (tIndex >= run.time.length - 1) tIndex = 0;
+  $("playBtn").textContent = "❚❚ Pause";
+  playing = setInterval(() => {
+    const step = Number($("speed").value) / 10;
+    tIndex = Math.min(run.time.length - 1, tIndex + Math.max(1, Math.round(step)));
+    $("timeSlider").value = tIndex; update();
+    if (tIndex >= run.time.length - 1) stop();
+  }, 100);
+});
+$("liveBtn").addEventListener("click", () => { stop(); tIndex = run.time.length - 1; $("timeSlider").value = tIndex; update(); });
+
+buildTiles();
+const params = new URLSearchParams(location.search);
+const startRun = RUNS.some((r) => r.id === params.get("run")) ? params.get("run") : RUNS[0].id;
+$("runSelect").value = startRun;
+selectRun(startRun);
+if (params.has("t")) {
+  const target = Number(params.get("t"));
+  tIndex = run.time.reduce((best, h, i) => (Math.abs(h - target) < Math.abs(run.time[best] - target) ? i : best), 0);
+  $("timeSlider").value = tIndex; update();
+}
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

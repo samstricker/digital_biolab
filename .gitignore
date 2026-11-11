@@ -10,3 +10,6 @@ src/dbiolab/mammalian_cellculture_simulation/reactor_types/*
 
 # Output of setup_and_tutorial/scale_library.ipynb
 generated_library/
+
+# Built operator dashboard
+hmi_dashboard/output/
