@@ -162,6 +162,20 @@ def get_product_concentration_figure(data: ReactionEvolutionTimeseries):
         trace_name="Product Aggregates Concentration",
         color="red",
     )
+    add_timeseries_trace(
+        figure=product_figure,
+        x_data=data.timepoints,
+        y_data=data.c_glycated,
+        trace_name="Glycated Product Concentration",
+        color="orange",
+    )
+    add_timeseries_trace(
+        figure=product_figure,
+        x_data=data.timepoints,
+        y_data=data.c_hcp,
+        trace_name="Host Cell Protein Concentration",
+        color="gray",
+    )
     product_figure.update_layout(
         title="Product Concentration Evolution Over Time",
         xaxis_title="Time (hours)",

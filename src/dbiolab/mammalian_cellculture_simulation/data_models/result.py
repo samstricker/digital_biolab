@@ -35,6 +35,10 @@ class ReactionEvolutionTimeseries:
         Initial ammonia concentration [mM].
     c_aggregates : NDArray[np.float64]
         Product aggregates concentration [mM].
+    c_glycated : NDArray[np.float64]
+        Glycated product concentration [mM].
+    c_hcp : NDArray[np.float64]
+        Host cell protein concentration [mM].
     purity : NDArray[np.float64]
         Product purity (fraction of total protein-like substances) [-].
     """
@@ -50,6 +54,8 @@ class ReactionEvolutionTimeseries:
     c_lac: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     c_ammonia: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     c_aggregates: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    c_glycated: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    c_hcp: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     purity: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
 
     def extend(self, other: "ReactionEvolutionTimeseries"):
@@ -70,6 +76,8 @@ class ReactionEvolutionTimeseries:
         self.c_lac = np.concatenate((self.c_lac, other.c_lac))
         self.c_ammonia = np.concatenate((self.c_ammonia, other.c_ammonia))
         self.c_aggregates = np.concatenate((self.c_aggregates, other.c_aggregates))
+        self.c_glycated = np.concatenate((self.c_glycated, other.c_glycated))
+        self.c_hcp = np.concatenate((self.c_hcp, other.c_hcp))
         self.purity = np.concatenate((self.purity, other.purity))
 
     def to_dict(self) -> Dict:
@@ -92,6 +100,8 @@ class ReactionEvolutionTimeseries:
             "c_lac": self.c_lac.tolist(),
             "c_ammonia": self.c_ammonia.tolist(),
             "c_aggregates": self.c_aggregates.tolist(),
+            "c_glycated": self.c_glycated.tolist(),
+            "c_hcp": self.c_hcp.tolist(),
             "purity": self.purity.tolist(),
         }
 
@@ -141,6 +151,8 @@ class ReactionEvolutionTimeseries:
             c_lac=np.array(data["c_lac"]),
             c_ammonia=np.array(data["c_ammonia"]),
             c_aggregates=np.array(data["c_aggregates"]),
+            c_glycated=np.array(data["c_glycated"]),
+            c_hcp=np.array(data["c_hcp"]),
             purity=np.array(data["purity"]),
         )
 

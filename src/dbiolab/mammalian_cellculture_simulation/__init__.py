@@ -10,7 +10,7 @@ from .data_models import (
     NoiseParameters,
 )
 from .cellculture_simulator import MammalianCellcultureReactor
-from .visualization import plot_reaction_evolution_timeseries
+from .visualization import plot_reaction_evolution_timeseries, plot_setpoints
 
 
 __all__ = [
@@ -21,6 +21,7 @@ __all__ = [
     "MammalianRecipe",
     "NoiseParameters",
     "plot_reaction_evolution_timeseries",
+    "plot_setpoints",
     "ReactionEvolutionTimeseries",
     "ReactorType",
 ]

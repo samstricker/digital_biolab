@@ -67,14 +67,80 @@ class CellType:
         Smoothness factor for temperature effect on the left side of the optimal temperature.
     smoothness_factor_t_r : float
         Smoothness factor for temperature effect on the right side of the optimal temperature.
-    y_product_from_total : float
-        Product yield from total cells [-].
+    y_product_non_growth : float
+        Non-growth-associated production per viable cell [mM mL cell^-1 h^-1].
     y_product_from_viable : float
         Product yield from viable cells [-].
     hcp_per_cell : float
-        Host cell protein (HCP) amount per cell [mM/cells mL^-1].
+        Host cell protein (HCP) released per lysed cell [mM/cells mL^-1].
     k_agg_product : float
         Product aggregation rate constant [mM^-1 h^-1].
+    y_glc_product : float
+        Glucose consumed per unit of product formed [mmol glc / mmol product].
+    ph_opt_product : float
+        Optimal pH for product formation (may differ from the growth optimum).
+    ph_robustness_factor_product : float
+        pH robustness factor for product formation.
+    steepness_factor_ph_l_product : float
+        Steepness factor for the production pH effect below ph_opt_product.
+    steepness_factor_ph_r_product : float
+        Steepness factor for the production pH effect above ph_opt_product.
+    smoothness_factor_ph_l_product : float
+        Smoothness factor for the production pH effect below ph_opt_product.
+    smoothness_factor_ph_r_product : float
+        Smoothness factor for the production pH effect above ph_opt_product.
+    y_lactate_max : float
+        Lactate yield from glucose at high glucose (overflow metabolism) [-].
+        ``y_lactate`` is the yield at low glucose.
+    k_overflow_glc : float
+        Glucose concentration at which the lactate yield is halfway between
+        ``y_lactate`` and ``y_lactate_max`` [mM].
+    k_inh_lac_product : float
+        Lactate inhibition constant for product formation [mM].
+    k_death_lac : float
+        Lactate concentration that doubles the death rate [mM].
+    y_gln_product : float
+        Glutamine consumed per unit of product formed [mmol gln / mmol product].
+    k_inh_ammonia_product : float
+        Ammonia inhibition constant for product formation [mM].
+    k_death_ammonia : float
+        Ammonia concentration that doubles the death rate [mM].
+    ph_min_factor_product : float
+        Lower bound of the pH factor for product formation [-]. A low value
+        means little product is made far from ph_opt_product, so a growth phase
+        followed by a pH shift pays off.
+    k_death_stress : float
+        Extra death far from the growth temperature and pH optima [-]. The
+        death rate is multiplied by ``1 + k_death_stress * (1 - f_T * f_pH)``.
+    t_opt_product : float
+        Optimal temperature for product formation [C].
+    temperature_robustness_factor_product : float
+        Temperature robustness factor for product formation.
+    steepness_factor_t_l_product : float
+        Steepness of the production temperature effect below t_opt_product.
+    steepness_factor_t_r_product : float
+        Steepness of the production temperature effect above t_opt_product.
+    smoothness_factor_t_l_product : float
+        Smoothness of the production temperature effect below t_opt_product.
+    smoothness_factor_t_r_product : float
+        Smoothness of the production temperature effect above t_opt_product.
+    q_lac_uptake : float
+        Maximum lactate consumption rate [mM mL cell^-1 h^-1].
+    k_glc_lac_switch : float
+        Glucose concentration below which cells switch to consuming lactate [mM].
+    k_sat_lac_uptake : float
+        Saturation constant for lactate consumption [mM].
+    k_glycation : float
+        Glycation rate constant of the product by glucose [mM^-1 h^-1].
+    k_lactate_ph : float
+        Relative change of the lactate yield per pH unit [pH^-1]. The yield is
+        multiplied by ``1 + k_lactate_ph * (pH - ph_ref_lactate)``.
+    ph_ref_lactate : float
+        pH at which the lactate yield is unchanged.
+    q10_metabolism : float
+        Factor by which maintenance and lactate formation change per 10 C [-].
+    t_ref_metabolism : float
+        Temperature at which the Q10 factor is 1 [C].
 
     Notes
     -----
@@ -112,10 +178,40 @@ class CellType:
     steepness_factor_t_r: float
     smoothness_factor_t_l: float
     smoothness_factor_t_r: float
-    y_product_from_total: float
+    y_product_non_growth: float
     y_product_from_viable: float
     hcp_per_cell: float
     k_agg_product: float
+    y_glc_product: float
+    ph_opt_product: float
+    ph_robustness_factor_product: float
+    steepness_factor_ph_l_product: float
+    steepness_factor_ph_r_product: float
+    smoothness_factor_ph_l_product: float
+    smoothness_factor_ph_r_product: float
+    y_lactate_max: float
+    k_overflow_glc: float
+    k_inh_lac_product: float
+    k_death_lac: float
+    y_gln_product: float
+    k_inh_ammonia_product: float
+    k_death_ammonia: float
+    ph_min_factor_product: float
+    k_death_stress: float
+    t_opt_product: float
+    temperature_robustness_factor_product: float
+    steepness_factor_t_l_product: float
+    steepness_factor_t_r_product: float
+    smoothness_factor_t_l_product: float
+    smoothness_factor_t_r_product: float
+    q_lac_uptake: float
+    k_glc_lac_switch: float
+    k_sat_lac_uptake: float
+    k_glycation: float
+    k_lactate_ph: float
+    ph_ref_lactate: float
+    q10_metabolism: float
+    t_ref_metabolism: float
 
     @staticmethod
     def from_json(data_path: str) -> "CellType":

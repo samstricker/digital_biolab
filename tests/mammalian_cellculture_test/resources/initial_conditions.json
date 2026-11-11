@@ -7,5 +7,7 @@
     "c_gln": 4.0,
     "c_lac": 0.0,
     "c_ammonia": 0.0,
-    "c_aggregates": 0.0
+    "c_aggregates": 0.0,
+    "c_glycated": 0.0,
+    "c_hcp": 0.0
 }

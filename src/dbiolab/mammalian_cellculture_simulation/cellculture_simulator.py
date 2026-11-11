@@ -15,6 +15,10 @@ from dbiolab.mammalian_cellculture_simulation.data_models import (
 )
 
 
+# At most two lactate per glucose (glycolysis stoichiometry)
+MAX_LACTATE_PER_GLUCOSE = 2.0
+
+
 class MammalianCellcultureReactor:
     """Simulator for mammalian cell culture growth and behavior.
 
@@ -72,20 +76,33 @@ class MammalianCellcultureReactor:
     def _solve_odes(self, recipe: MammalianRecipe) -> ReactionEvolutionTimeseries:
         current_time = 0.0
         current_y = recipe.initial_conditions.as_list()
+        temperature, ph_value = recipe.temperature, recipe.ph_value
         solutions = ReactionEvolutionTimeseries(name=recipe.name)
         for feeding_event in recipe.feeding_strategy:
             partial_solution, current_time = self._calculate_partial_solution(
-                current_time, feeding_event.time_point, current_y, recipe
+                current_time,
+                feeding_event.time_point,
+                current_y,
+                recipe,
+                temperature,
+                ph_value,
             )
             solutions.extend(partial_solution)
             current_y = self._update_conditions_with_feed(
                 partial_solution, feeding_event
             )
+            # A feeding event may also shift the temperature and/or pH setpoint
+            if feeding_event.temperature is not None:
+                temperature = feeding_event.temperature
+            if feeding_event.ph_value is not None:
+                ph_value = feeding_event.ph_value
         partial_solution, current_time = self._calculate_partial_solution(
             current_time,
             recipe.runtime,
             current_y,
             recipe,
+            temperature,
+            ph_value,
         )
         solutions.extend(partial_solution)
         return solutions
@@ -96,6 +113,8 @@ class MammalianCellcultureReactor:
         end_time: float,
         current_y: list[float],
         recipe: MammalianRecipe,
+        temperature: float,
+        ph_value: float,
     ):
         time_segment = (start_time, end_time)
         n_measurements = int((end_time - start_time) / recipe.measurement_intervals)
@@ -106,10 +125,10 @@ class MammalianCellcultureReactor:
             y0=current_y,
             t_eval=measurement_times,
             method="RK45",
-            args=(recipe,),
+            args=(recipe, temperature, ph_value),
         )
         current_time = end_time
-        purity = self._calculate_purity(solution, recipe)
+        purity = self._calculate_purity(solution)
         partial_solution = ReactionEvolutionTimeseries(
             name=recipe.name,
             timepoints=solution.t,
@@ -122,6 +141,8 @@ class MammalianCellcultureReactor:
             c_lac=solution.y[6],
             c_ammonia=solution.y[7],
             c_aggregates=solution.y[8],
+            c_glycated=solution.y[9],
+            c_hcp=solution.y[10],
             purity=purity,
         )
         return partial_solution, current_time
@@ -131,6 +152,8 @@ class MammalianCellcultureReactor:
         partial_solution: ReactionEvolutionTimeseries,
         feeding_event: FeedingEvent,
     ) -> list[float]:
+        # The feed adds its amounts, then everything is diluted by its volume
+        dilution = 1.0 + feeding_event.volume_fraction
         final_conditions = [
             partial_solution.c_product[-1]
             + feeding_event.feed_concentrations.c_product,
@@ -143,14 +166,31 @@ class MammalianCellcultureReactor:
             partial_solution.c_ammonia[-1]
             + feeding_event.feed_concentrations.c_ammonia,
             partial_solution.c_aggregates[-1],  # Aggregates not fed
+            partial_solution.c_glycated[-1],  # Glycated product not fed
+            partial_solution.c_hcp[-1],  # Host cell protein not fed
         ]
-        return final_conditions
+        return [value / dilution for value in final_conditions]
 
-    def _ode_system(self, _, x, recipe: MammalianRecipe):
+    def _ode_system(
+        self, _, x, recipe: MammalianRecipe, temperature: float, ph_value: float
+    ):
         # x_* here is the cell density and c_* the concentrations of the metabolites
-        _, x_total, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia, _ = x
+        _, _, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia, _, _, _ = x
         current_growth_rate = self._calculate_growth_rate(
-            c_glc, c_gln, c_lac, c_ammonia, recipe
+            c_glc, c_gln, c_lac, c_ammonia, recipe, temperature, ph_value
+        )
+        c_lac_pos = max(c_lac, 0.0)
+        c_ammonia_pos = max(c_ammonia, 0.0)
+        # Lactate (acidification/osmolality), ammonia and conditions far from
+        # the growth optima (temperature/pH stress) raise the death rate
+        condition_stress = max(
+            0.0, 1.0 - self._calculate_growth_conditions(recipe, temperature, ph_value)
+        )
+        toxicity_death_factor = (
+            1.0
+            + c_lac_pos / recipe.celltype.k_death_lac
+            + c_ammonia_pos / recipe.celltype.k_death_ammonia
+            + recipe.celltype.k_death_stress * condition_stress
         )
         k_death = (
             recipe.celltype.k_death_max
@@ -159,6 +199,7 @@ class MammalianCellcultureReactor:
                 / (current_growth_rate + recipe.celltype.k_death_mu)
             )
             * self.reactor_type.scale_factor
+            * toxicity_death_factor
         )
         x_total_gradient = (current_growth_rate * x_viable) - (
             recipe.celltype.k_lysis * x_dead
@@ -166,23 +207,105 @@ class MammalianCellcultureReactor:
         x_viable_gradient = (current_growth_rate - k_death) * x_viable
         x_dead_gradient = (k_death * x_viable) - (recipe.celltype.k_lysis * x_dead)
 
-        # Product formation from cells
-        product_formation = (x_total * recipe.celltype.y_product_from_total) + (
-            recipe.celltype.y_product_from_viable * x_viable * current_growth_rate
+        # Product formation by viable cells: modulated by its own temperature
+        # and pH optima, limited by glucose (carbon) and glutamine (nitrogen)
+        # availability, and inhibited by lactate and ammonia.
+        celltype = recipe.celltype
+        product_temperature_factor = self._calculate_temperature_effect(
+            temperature,
+            celltype.t_opt_product,
+            celltype.temperature_robustness_factor_product,
+            celltype.steepness_factor_t_l_product,
+            celltype.steepness_factor_t_r_product,
+            celltype.smoothness_factor_t_l_product,
+            celltype.smoothness_factor_t_r_product,
+        )
+        product_ph_factor = self._calculate_ph_effect(
+            ph_value,
+            celltype.ph_opt_product,
+            celltype.ph_robustness_factor_product,
+            celltype.steepness_factor_ph_l_product,
+            celltype.steepness_factor_ph_r_product,
+            celltype.smoothness_factor_ph_l_product,
+            celltype.smoothness_factor_ph_r_product,
+            celltype.ph_min_factor_product,
+        )
+        c_glc_pos = max(c_glc, 0.0)
+        glc_limitation = c_glc_pos / (celltype.k_sat_glc + c_glc_pos)
+        c_gln_pos = max(c_gln, 0.0)
+        gln_limitation = c_gln_pos / (celltype.k_sat_gln + c_gln_pos)
+        lactate_product_inhibition = celltype.k_inh_lac_product / (
+            celltype.k_inh_lac_product + c_lac_pos
+        )
+        ammonia_product_inhibition = celltype.k_inh_ammonia_product / (
+            celltype.k_inh_ammonia_product + c_ammonia_pos
+        )
+        product_formation = (
+            (
+                celltype.y_product_non_growth
+                + celltype.y_product_from_viable * current_growth_rate
+            )
+            * x_viable
+            * product_temperature_factor
+            * product_ph_factor
+            * glc_limitation
+            * gln_limitation
+            * lactate_product_inhibition
+            * ammonia_product_inhibition
         )
         c_product = x[0]  # Get current product concentration
-        product_aggregation = recipe.celltype.k_agg_product * (c_product**2)
-        product_gradient = product_formation - 2 * product_aggregation
+        product_aggregation = celltype.k_agg_product * (c_product**2)
+        # Glycation: glucose reacts non-enzymatically with the product, so a
+        # high glucose level degrades product quality
+        product_glycation = celltype.k_glycation * max(c_glc, 0.0) * c_product
+        product_gradient = (
+            product_formation - 2 * product_aggregation - product_glycation
+        )
 
+        # Metabolism slows at lower temperature (mild hypothermia):
+        # maintenance and lactate formation scale with a Q10 factor
+        metabolism_factor = celltype.q10_metabolism ** (
+            (temperature - celltype.t_ref_metabolism) / 10.0
+        )
         c_glc_gradient = x_viable * (
-            (-current_growth_rate / recipe.celltype.y_cells_glc) - recipe.celltype.m_glc
+            (-current_growth_rate / celltype.y_cells_glc)
+            - celltype.m_glc * metabolism_factor
         )
+        # Glucose consumed for product synthesis
+        c_glc_gradient -= celltype.y_glc_product * product_formation
+        # Overflow metabolism: lactate yield on total glucose uptake rises from
+        # y_lactate towards y_lactate_max as glucose becomes abundant. A higher
+        # pH also raises the lactate yield, a lower pH reduces it.
+        lactate_yield = min(
+            MAX_LACTATE_PER_GLUCOSE,
+            (
+                celltype.y_lactate
+                + (celltype.y_lactate_max - celltype.y_lactate)
+                * c_glc_pos
+                / (celltype.k_overflow_glc + c_glc_pos)
+            )
+            * max(
+                0.0, 1.0 + celltype.k_lactate_ph * (ph_value - celltype.ph_ref_lactate)
+            )
+            * metabolism_factor,
+        )
+        # When glucose runs low, cells switch to consuming lactate
+        lactate_uptake = (
+            celltype.q_lac_uptake
+            * x_viable
+            * celltype.k_glc_lac_switch
+            / (celltype.k_glc_lac_switch + c_glc_pos)
+            * c_lac_pos
+            / (celltype.k_sat_lac_uptake + c_lac_pos)
+        )
+        c_lac_gradient = -lactate_yield * c_glc_gradient - lactate_uptake
+        # Glutamine consumed by cells for growth, maintenance and product
         c_gln_gradient_no_degrad = x_viable * (
-            (-current_growth_rate / recipe.celltype.y_cells_gln) - recipe.celltype.m_gln
-        )
+            (-current_growth_rate / celltype.y_cells_gln)
+            - celltype.m_gln * metabolism_factor
+        ) - celltype.y_gln_product * product_formation
         c_gln_degrad = recipe.celltype.k_deg_gln * c_gln
         c_gln_gradient = c_gln_gradient_no_degrad - c_gln_degrad
-        c_lac_gradient = -recipe.celltype.y_lactate * c_glc_gradient
         c_ammonia_gradient = (
             -recipe.celltype.y_ammonia * c_gln_gradient_no_degrad
         ) + c_gln_degrad
@@ -196,6 +319,9 @@ class MammalianCellcultureReactor:
             c_lac_gradient,
             c_ammonia_gradient,
             product_aggregation,
+            product_glycation,
+            # Host cell protein accumulates as dead cells lyse
+            celltype.hcp_per_cell * celltype.k_lysis * x_dead,
         ]
 
     def _calculate_growth_rate(
@@ -205,6 +331,8 @@ class MammalianCellcultureReactor:
         c_lac: float,
         c_ammonia: float,
         recipe: MammalianRecipe,
+        temperature: float,
+        ph_value: float,
     ) -> float:
         # make sure to not have zero concentrations
         c_glc = max(c_glc, 1e-6)
@@ -212,23 +340,8 @@ class MammalianCellcultureReactor:
         c_lac = max(c_lac, 1e-6)
         c_ammonia = max(c_ammonia, 1e-6)
 
-        temperature_factor = self._calculate_temperature_effect(
-            recipe.temperature,
-            recipe.celltype.e_activation,
-            recipe.celltype.temperature_robustness_factor,
-            recipe.celltype.steepness_factor_t_l,
-            recipe.celltype.steepness_factor_t_r,
-            recipe.celltype.smoothness_factor_t_l,
-            recipe.celltype.smoothness_factor_t_r
-        )
-        ph_factor = self._calculate_ph_effect(
-            recipe.ph_value,
-            recipe.celltype.ph_opt,
-            recipe.celltype.ph_robustness_factor,
-            recipe.celltype.steepness_factor_ph_l,
-            recipe.celltype.steepness_factor_ph_r,
-            recipe.celltype.smoothness_factor_ph_l,
-            recipe.celltype.smoothness_factor_ph_r
+        growth_conditions = self._calculate_growth_conditions(
+            recipe, temperature, ph_value
         )
         growth_rate = (
             recipe.celltype.mu_max
@@ -240,11 +353,35 @@ class MammalianCellcultureReactor:
             / (recipe.celltype.k_sat_lac + c_lac)
             * recipe.celltype.k_sat_ammonia
             / (recipe.celltype.k_sat_ammonia + c_ammonia)
-            * temperature_factor
-            * ph_factor
+            * growth_conditions
             * self.reactor_type.growth_inhibition
         )
         return growth_rate
+
+    def _calculate_growth_conditions(
+        self, recipe: MammalianRecipe, temperature: float, ph_value: float
+    ) -> float:
+        """Combined temperature and pH factor for growth (1 at the optimum)."""
+        celltype = recipe.celltype
+        temperature_factor = self._calculate_temperature_effect(
+            temperature,
+            celltype.e_activation,
+            celltype.temperature_robustness_factor,
+            celltype.steepness_factor_t_l,
+            celltype.steepness_factor_t_r,
+            celltype.smoothness_factor_t_l,
+            celltype.smoothness_factor_t_r,
+        )
+        ph_factor = self._calculate_ph_effect(
+            ph_value,
+            celltype.ph_opt,
+            celltype.ph_robustness_factor,
+            celltype.steepness_factor_ph_l,
+            celltype.steepness_factor_ph_r,
+            celltype.smoothness_factor_ph_l,
+            celltype.smoothness_factor_ph_r,
+        )
+        return temperature_factor * ph_factor
 
     def _calculate_temperature_effect(
         self,
@@ -283,9 +420,8 @@ class MammalianCellcultureReactor:
         steepness_factor_ph_r: float,
         smoothness_factor_ph_l: float,
         smoothness_factor_ph_r: float,
+        min_factor: float = 0.2,
     ) -> float:
-        
-
         left_part = np.exp(
             -steepness_factor_ph_l * ((ph_value - ph_opt) / smoothness_factor_ph_l) ** 2
         )
@@ -295,20 +431,20 @@ class MammalianCellcultureReactor:
         factor = ph_robustness_factor * np.where(
             ph_value < ph_opt, left_part, right_part
         )
-        factor = np.clip(
-            factor, 0.2, None
-        )  # pH effect can not zero out growth completely
+        # pH effect can not zero out the rate completely
+        factor = np.clip(factor, min_factor, None)
         return float(factor)
 
-    def _calculate_purity(self, solution, recipe: MammalianRecipe) -> np.ndarray:
-        """Calculate product purity from solution trajectory.
+    def _calculate_purity(self, solution) -> np.ndarray:
+        """Calculate product purity: active product over all protein.
+
+        All protein is the product, its aggregates, glycated product and host
+        cell protein.
 
         Parameters
         ----------
         solution : scipy.integrate.OdeResult
             The ODE solution from solve_ivp.
-        recipe : MammalianRecipe
-            The recipe with cell type parameters.
 
         Returns
         -------
@@ -317,18 +453,10 @@ class MammalianCellcultureReactor:
         """
         c_product = solution.y[0]
         c_aggregates = solution.y[8]
-        x_dead = solution.y[3]
-        c_hcp = x_dead * recipe.celltype.k_lysis * recipe.celltype.hcp_per_cell
-        total_protein_like = (
-            c_product
-            + c_aggregates
-            + c_hcp
-            + solution.y[4]
-            + solution.y[5]
-            + solution.y[6]
-            + solution.y[7]
-        )
-        purity = c_product / (total_protein_like + 1e-9)
+        c_glycated = solution.y[9]
+        c_hcp = solution.y[10]
+        total_protein = c_product + c_aggregates + c_glycated + c_hcp
+        purity = c_product / (total_protein + 1e-12)
         purity = np.clip(purity, 0, 1)
 
         return purity
@@ -438,6 +566,8 @@ class MammalianCellcultureReactor:
             ("c_lac", solution.c_lac),
             ("c_ammonia", solution.c_ammonia),
             ("c_aggregates", solution.c_aggregates),
+            ("c_glycated", solution.c_glycated),
+            ("c_hcp", solution.c_hcp),
         ]
 
         return [
@@ -523,6 +653,8 @@ class MammalianCellcultureReactor:
         solution.c_lac = np.clip(solution.c_lac, 0, None)
         solution.c_ammonia = np.clip(solution.c_ammonia, 0, None)
         solution.c_aggregates = np.clip(solution.c_aggregates, 0, None)
+        solution.c_glycated = np.clip(solution.c_glycated, 0, None)
+        solution.c_hcp = np.clip(solution.c_hcp, 0, None)
         # Purity is already clipped in _calculate_purity, but ensure it's in [0, 1]
         solution.purity = np.clip(solution.purity, 0, 1)
 

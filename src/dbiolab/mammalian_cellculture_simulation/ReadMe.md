@@ -6,6 +6,7 @@ To use the mammalian cell culture simulator, you can follow these steps:
 1. **Define Reactor Type**: Create a JSON file specifying the reactor parameters (e.g., scale factor, temperature and pH parameters, noise parameters).
 2. **Define Cell Type**: Create a JSON file specifying the cell parameters (e.g., growth rates, yield coefficients).
 3. **Define Recipe**: Create a JSON file specifying the initial conditions, feeding strategy, and runtime.
+   Each feeding event adds its `feed_concentrations` (amounts per culture volume before the feed) and then dilutes the whole culture by `1 + volume_fraction`, the feed volume relative to the culture volume. It can optionally set a new `temperature` and/or `ph_value`; the culture runs at that setpoint from the feed on (e.g. a temperature or pH shift). Leave them out (or `null`) to keep the current setpoint.
 4. **Run Simulation**: Use the `MammalianCellCultureSimulator` class to run the simulation with the defined reactor, cell type, and recipe.
 5. **Analyze Results**: The simulator will return time-series data for all state variables, which can be analyzed to evaluate process performance, optimize conditions, or test control strategies.
 
@@ -35,6 +36,9 @@ Below you can see a summary of the used differential equations to simulate a CHO
 - $c_{gln}$: Glutamine concentration
 - $c_{lac}$: Lactate concentration
 - $c_{ammonia}$: Ammonia concentration
+- $c_{aggregates}$: Product aggregate concentration
+- $c_{glycated}$: Glycated product concentration
+- $c_{HCP}$: Host cell protein concentration
 
 ### Growth Rate
 The specific growth rate is calculated as:
@@ -65,7 +69,7 @@ $$f_{pH} = r_{pH} \cdot \begin{cases}
 
 where $pH_{opt}$ is the optimal pH and $r_{pH}$ is the pH robustness factor. The factor is clipped to a minimum of 0.2.
 
-Note: For growth rate calculations, different pH and temperature parameters are used than for product formation.
+Note: product formation uses its own temperature and pH responses (see below).
 
 ### Growth Inhibition
 
@@ -78,7 +82,9 @@ This represents the reduction in growth rate due to reactor-specific conditions 
 ### Death Rate
 The specific death rate is:
 
-$$k_{death} = k_{death,max} \cdot \frac{k_{death,\mu}}{\mu + k_{death,\mu}} \cdot s_{scale}$$
+$$k_{death} = k_{death,max} \cdot \frac{k_{death,\mu}}{\mu + k_{death,\mu}} \cdot s_{scale} \cdot \left(1 + \frac{c_{lac}}{k_{death,lac}} + \frac{c_{ammonia}}{k_{death,ammonia}} + k_{death,stress} \cdot \left(1 - f_{temp} \cdot f_{pH}\right)\right)$$
+
+Lactate (acidification, osmolality) and ammonia toxicity raise the death rate, and so do temperature and pH far from the growth optima (stress), so a culture cannot be parked at harsh conditions without losing cells.
 
 
 ### Cell Population Dynamics
@@ -92,31 +98,44 @@ $$\frac{dx_{dead}}{dt} = k_{death} \cdot x_{viable} - k_{lysis} \cdot x_{dead}$$
 ### Metabolite Dynamics
 
 #### Product Formation and Aggregation
-$$\frac{dc_{product}}{dt} = \left(x_{total} \cdot y_{product,total} + x_{viable} \cdot y_{product,viable} \cdot \mu\right) - 2 \cdot k_{agg} \cdot c_{product}^2$$
+$$q_{P} = x_{viable} \cdot \left(y_{product,ng} + y_{product,viable} \cdot \mu\right) \cdot f_{temp,P} \cdot f_{pH,P} \cdot \frac{c_{glc}}{k_{sat,glc} + c_{glc}} \cdot \frac{c_{gln}}{k_{sat,gln} + c_{gln}} \cdot \frac{k_{inh,lac,P}}{k_{inh,lac,P} + c_{lac}} \cdot \frac{k_{inh,amm,P}}{k_{inh,amm,P} + c_{ammonia}}$$
+
+$$\frac{dc_{product}}{dt} = q_{P} - 2 \cdot k_{agg} \cdot c_{product}^2 - k_{glyc} \cdot c_{glc} \cdot c_{product}$$
+
+Only viable cells produce. $f_{temp,P}$ uses the same functional form as $f_{temp}$ with its own production parameters (`t_opt_product`, `temperature_robustness_factor_product`, `steepness_factor_t_{l,r}_product`, `smoothness_factor_t_{l,r}_product`); a production optimum below the growth optimum models the higher specific productivity at mild hypothermia. $f_{pH,P}$ uses the same functional form as $f_{pH}$ but with its own production parameters (`ph_opt_product`, `ph_robustness_factor_product`, `steepness_factor_ph_{l,r}_product`, `smoothness_factor_ph_{l,r}_product`), so the production pH optimum can differ from the growth optimum, and its own lower bound (`ph_min_factor_product`, instead of 0.2) so that little product is made far from the production optimum. Production stops when glucose or glutamine is depleted.
 
 #### Product Aggregation
 $$\frac{dc_{aggregates}}{dt} = k_{agg} \cdot c_{product}^2$$
 
+#### Product Glycation
+$$\frac{dc_{glycated}}{dt} = k_{glyc} \cdot c_{glc} \cdot c_{product}$$
+
+Glucose reacts non-enzymatically with the product, so glucose left in the culture degrades product quality and overfeeding glucose has a cost.
+
 #### Glucose Consumption
-$$\frac{dc_{glc}}{dt} = x_{viable} \cdot \left(-\frac{\mu}{y_{cells,glc}} - m_{glc}\right)$$
+$$\frac{dc_{glc}}{dt} = x_{viable} \cdot \left(-\frac{\mu}{y_{cells,glc}} - m_{glc}\right) - y_{glc,product} \cdot q_{P}$$
 
 #### Glutamine Dynamics
-$$\frac{dc_{gln}}{dt} = x_{viable} \cdot \left(-\frac{\mu}{y_{cells,gln}} - m_{gln}\right) - k_{deg,gln} \cdot c_{gln}$$
+$$q_{gln} = x_{viable} \cdot \left(\frac{\mu}{y_{cells,gln}} + m_{gln}\right) + y_{gln,product} \cdot q_{P}$$
+
+$$\frac{dc_{gln}}{dt} = -q_{gln} - k_{deg,gln} \cdot c_{gln}$$
 
 #### Lactate Production
-$$\frac{dc_{lac}}{dt} = -y_{lactate} \cdot \frac{dc_{glc}}{dt}$$
+$$\frac{dc_{lac}}{dt} = -y_{lac}(c_{glc}) \cdot \frac{dc_{glc}}{dt} - q_{lac,uptake} \cdot x_{viable} \cdot \frac{k_{switch}}{k_{switch} + c_{glc}} \cdot \frac{c_{lac}}{k_{sat,lac,up} + c_{lac}}, \qquad y_{lac}(c_{glc}) = y_{lactate} + \left(y_{lactate,max} - y_{lactate}\right) \frac{c_{glc}}{k_{overflow} + c_{glc}}$$
+
+Overflow metabolism: the lactate yield on all glucose taken up (growth, maintenance and product) rises as glucose becomes abundant. Lactate inhibits growth through $k_{sat,lac}$ (realistic values 20-60 mM), production through $k_{inh,lac,P}$ and raises the death rate through $k_{death,lac}$. When glucose runs low (below about $k_{switch}$), cells switch to consuming lactate. A higher pH raises lactate formation: $y_{lac}$ is multiplied by $1 + k_{lac,pH} \cdot (pH - pH_{ref,lac})$ [`k_lactate_ph`, `ph_ref_lactate`]. A lower temperature slows maintenance metabolism and lactate formation: $m_{glc}$, $m_{gln}$ and $y_{lac}$ are multiplied by $Q_{10}^{(T - T_{ref})/10}$ [`q10_metabolism`, `t_ref_metabolism`]. The lactate yield is capped at 2 lactate per glucose (glycolysis stoichiometry).
 
 #### Ammonia Production
-$$\frac{dc_{ammonia}}{dt} = -y_{ammonia} \cdot x_{viable} \cdot \left(-\frac{\mu}{y_{cells,gln}} - m_{gln}\right) + k_{deg,gln} \cdot c_{gln}$$
+$$\frac{dc_{ammonia}}{dt} = y_{ammonia} \cdot q_{gln} + k_{deg,gln} \cdot c_{gln}$$
 
 #### Product Purity
 
-Product purity is calculated as the ratio of active product to all protein-like and non-specific substances present in the culture:
+Product purity is calculated as the share of active product among all protein in the culture:
 
-$$\text{purity} = \frac{c_{product}}{c_{product} + c_{aggregates} + c_{HCP} + c_{glc} + c_{gln} + c_{lac} + c_{ammonia}}$$
+$$\text{purity} = \frac{c_{product}}{c_{product} + c_{aggregates} + c_{glycated} + c_{HCP}}$$
 
-where $c_{HCP}$ is calculated as:
-$$c_{HCP} = x_{dead} \cdot k_{lysis} \cdot hcp_{per\_cell}$$
+where host cell protein accumulates as dead cells lyse:
+$$\frac{dc_{HCP}}{dt} = hcp_{per\_cell} \cdot k_{lysis} \cdot x_{dead}$$
 
 ### Parameters
 - $c_{product}$: Active product concentration
@@ -129,14 +148,15 @@ $$c_{HCP} = x_{dead} \cdot k_{lysis} \cdot hcp_{per\_cell}$$
 - $\mu_{max}$: Maximum specific growth rate [`mu_max`]
 - $k_{sat,glc}$, $k_{sat,gln}$, $k_{sat,lac}$, $k_{sat,ammonia}$: Monod saturation constants [`k_sat_glc`, `k_sat_gln`, `k_sat_lac`, `k_sat_ammonia`]
 - $y_{cells,glc}$, $y_{cells,gln}$: Cell yield coefficients [`y_cells_glc`, `y_cells_gln`]
-- $y_{product,total}$, $y_{product,viable}$: Product yield coefficients [`y_product_from_total`, `y_product_from_viable`]
+- $y_{product,ng}$, $y_{product,viable}$: Non-growth- and growth-associated production per viable cell [`y_product_non_growth`, `y_product_from_viable`]
 - $y_{lactate}$, $y_{ammonia}$: Byproduct yield coefficients [`y_lactate`, `y_ammonia`]
 - $m_{glc}$, $m_{gln}$: Maintenance coefficients [`m_glc`, `m_gln`]
 - $k_{death,max}$, $k_{death,\mu}$: Death rate parameters [`k_death_max`, `k_death_mu`]
 - $k_{lysis}$: Cell lysis rate [`k_lysis`]
 - $k_{deg,gln}$: Glutamine degradation rate [`k_deg_gln`]
 - $k_{agg}$: Product aggregation rate constant [`k_agg_product`]
-- $hcp_{per\_cell}$: HCP amount per cell [`hcp_per_cell`]
+- $k_{glyc}$: Product glycation rate constant by glucose [`k_glycation`]
+- $hcp_{per\_cell}$: HCP released per lysed cell [`hcp_per_cell`]
 - $s_{scale}$: Reactor scale factor [`scale_factor`]
 - $g_{inhibition}$: Growth inhibition exponent [`growth_inhibition`]
 - $T_{opt}$: Optimal temperature for growth [`e_activation`]
@@ -145,6 +165,17 @@ $$c_{HCP} = x_{dead} \cdot k_{lysis} \cdot hcp_{per\_cell}$$
 - $pH_{opt}$: Optimal pH for growth [`ph_opt`]
 - $r_{pH}$: pH robustness factor [`ph_robustness_factor`]
 - $steepness_{pH,l}$, $steepness_{pH,r}$: Steepness factors for pH effect on the left and right side of the optimal pH [`steepness_factor_ph_l`, `steepness_factor_ph_r`]
+- $y_{glc,product}$: Glucose consumed per unit product formed [`y_glc_product`]
+- $y_{lactate}$, $y_{lactate,max}$, $k_{overflow}$: Lactate yield at low and high glucose, and the glucose at which it is halfway [`y_lactate`, `y_lactate_max`, `k_overflow_glc`]
+- $k_{inh,lac,P}$: Lactate inhibition constant for production [`k_inh_lac_product`]
+- $k_{death,lac}$: Lactate concentration that doubles the death rate [`k_death_lac`]
+- $y_{gln,product}$: Glutamine consumed per unit product formed [`y_gln_product`]
+- $k_{inh,amm,P}$: Ammonia inhibition constant for production [`k_inh_ammonia_product`]
+- $k_{death,ammonia}$: Ammonia concentration that doubles the death rate [`k_death_ammonia`]
+- $k_{death,stress}$: Extra death far from the growth temperature and pH optima [`k_death_stress`]
+- $T_{opt,P}$, $r_{temp,P}$, steepness/smoothness: temperature parameters for product formation [`t_opt_product`, `temperature_robustness_factor_product`, `steepness_factor_t_l_product`, `steepness_factor_t_r_product`, `smoothness_factor_t_l_product`, `smoothness_factor_t_r_product`]
+- $q_{lac,uptake}$, $k_{switch}$, $k_{sat,lac,up}$: Maximum lactate consumption, the glucose below which it switches on, and its saturation constant [`q_lac_uptake`, `k_glc_lac_switch`, `k_sat_lac_uptake`]
+- $pH_{opt,P}$, $r_{pH,P}$, steepness/smoothness: pH parameters for product formation [`ph_opt_product`, `ph_robustness_factor_product`, `steepness_factor_ph_l_product`, `steepness_factor_ph_r_product`, `smoothness_factor_ph_l_product`, `smoothness_factor_ph_r_product`]
 
 ### Noise in Simulations
 There are two types of noise that can be added to the simulations to create more realistic and variable outcomes, mimicking the inherent stochasticity in biological systems and measurement processes.

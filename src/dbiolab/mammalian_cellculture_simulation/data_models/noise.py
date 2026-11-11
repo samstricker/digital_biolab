@@ -30,6 +30,10 @@ class NoiseParameters:
         Process noise std dev for ammonia concentration [mM].
     process_noise_c_aggregates : float
         Process noise std dev for aggregates concentration [mM].
+    process_noise_c_glycated : float
+        Process noise std dev for glycated product concentration [mM].
+    process_noise_c_hcp : float
+        Process noise std dev for host cell protein concentration [mM].
     measurement_noise_c_product : float
         Measurement noise std dev for product concentration [mM].
     measurement_noise_x_total : float
@@ -48,6 +52,10 @@ class NoiseParameters:
         Measurement noise std dev for ammonia concentration [mM].
     measurement_noise_c_aggregates : float
         Measurement noise std dev for aggregates concentration [mM].
+    measurement_noise_c_glycated : float
+        Measurement noise std dev for glycated product concentration [mM].
+    measurement_noise_c_hcp : float
+        Measurement noise std dev for host cell protein concentration [mM].
     """
 
     process_noise_c_product: float = 0.0
@@ -59,6 +67,8 @@ class NoiseParameters:
     process_noise_c_lac: float = 0.0
     process_noise_c_ammonia: float = 0.0
     process_noise_c_aggregates: float = 0.0
+    process_noise_c_glycated: float = 0.0
+    process_noise_c_hcp: float = 0.0
     measurement_noise_c_product: float = 0.0
     measurement_noise_x_total: float = 0.0
     measurement_noise_x_viable: float = 0.0
@@ -68,6 +78,8 @@ class NoiseParameters:
     measurement_noise_c_lac: float = 0.0
     measurement_noise_c_ammonia: float = 0.0
     measurement_noise_c_aggregates: float = 0.0
+    measurement_noise_c_glycated: float = 0.0
+    measurement_noise_c_hcp: float = 0.0
 
     @staticmethod
     def from_json(data_path: str) -> "NoiseParameters":
@@ -113,6 +125,8 @@ class NoiseParameters:
             process_noise_c_lac=data.get("process_noise_c_lac", 0.0),
             process_noise_c_ammonia=data.get("process_noise_c_ammonia", 0.0),
             process_noise_c_aggregates=data.get("process_noise_c_aggregates", 0.0),
+            process_noise_c_glycated=data.get("process_noise_c_glycated", 0.0),
+            process_noise_c_hcp=data.get("process_noise_c_hcp", 0.0),
             measurement_noise_c_product=data.get("measurement_noise_c_product", 0.0),
             measurement_noise_x_total=data.get("measurement_noise_x_total", 0.0),
             measurement_noise_x_viable=data.get("measurement_noise_x_viable", 0.0),
@@ -124,6 +138,8 @@ class NoiseParameters:
             measurement_noise_c_aggregates=data.get(
                 "measurement_noise_c_aggregates", 0.0
             ),
+            measurement_noise_c_glycated=data.get("measurement_noise_c_glycated", 0.0),
+            measurement_noise_c_hcp=data.get("measurement_noise_c_hcp", 0.0),
         )
 
     def to_json(self, output_path: str) -> None:
@@ -155,6 +171,8 @@ class NoiseParameters:
             "process_noise_c_lac": self.process_noise_c_lac,
             "process_noise_c_ammonia": self.process_noise_c_ammonia,
             "process_noise_c_aggregates": self.process_noise_c_aggregates,
+            "process_noise_c_glycated": self.process_noise_c_glycated,
+            "process_noise_c_hcp": self.process_noise_c_hcp,
             "measurement_noise_c_product": self.measurement_noise_c_product,
             "measurement_noise_x_total": self.measurement_noise_x_total,
             "measurement_noise_x_viable": self.measurement_noise_x_viable,
@@ -164,4 +182,6 @@ class NoiseParameters:
             "measurement_noise_c_lac": self.measurement_noise_c_lac,
             "measurement_noise_c_ammonia": self.measurement_noise_c_ammonia,
             "measurement_noise_c_aggregates": self.measurement_noise_c_aggregates,
+            "measurement_noise_c_glycated": self.measurement_noise_c_glycated,
+            "measurement_noise_c_hcp": self.measurement_noise_c_hcp,
         }
