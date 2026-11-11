@@ -1,5 +1,6 @@
 """Tests for mammalian cell culture simulation module."""
 
+import numpy as np
 from dbiolab.mammalian_cellculture_simulation import (
     CellType,
     FeedConcentrations,
@@ -106,9 +107,9 @@ def test_feed_dilutes_the_culture():
     feed = recipe.feeding_strategy[0]
     feed.volume_fraction = 0.5
     diluted = simulator.run_experiment(recipe)
-    n_before = len(solution.timepoints) // 2
+    after_feed = int(np.argmax(solution.timepoints > feed.time_point))
     # Just after the feed, cell density is lower by the dilution factor
-    assert diluted.x_viable[n_before] < solution.x_viable[n_before]
+    assert diluted.x_viable[after_feed] < solution.x_viable[after_feed]
 
 
 def test_purity_is_a_fraction():

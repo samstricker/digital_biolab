@@ -76,9 +76,7 @@ class ReactorType:
     def power_per_volume(self, stirring_rate: float) -> float:
         """Impeller power input per volume [W m^-3] at ``stirring_rate`` [rpm]."""
         n = stirring_rate / 60.0
-        power = (
-            self.power_number * MEDIUM_DENSITY * n**3 * self.impeller_diameter**5
-        )
+        power = self.power_number * MEDIUM_DENSITY * n**3 * self.impeller_diameter**5
         return power / (self.volume / 1000.0)  # volume is in L
 
     def kla(self, stirring_rate: float) -> float:
@@ -95,10 +93,7 @@ class ReactorType:
         mean = self.power_per_volume(stirring_rate) / MEDIUM_DENSITY
         ratio = self.impeller_diameter / self.tank_diameter
         return (
-            5.9
-            * self.tank_diameter ** (2 / 3)
-            * mean ** (-1 / 3)
-            * ratio ** (-1 / 3)
+            5.9 * self.tank_diameter ** (2 / 3) * mean ** (-1 / 3) * ratio ** (-1 / 3)
         )
 
     def gas_flow_per_volume(self) -> float:

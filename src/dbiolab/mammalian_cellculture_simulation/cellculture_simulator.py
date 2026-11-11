@@ -1,18 +1,29 @@
 """Module for simulating mammalian cell culture growth and behavior."""
 
-from typing import List, Optional
+from dataclasses import replace
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from scipy.integrate import solve_ivp
 
 from dbiolab.mammalian_cellculture_simulation.data_models import (
+    ActuatorNoise,
+    BatchVariability,
+    FeedConcentrations,
     FeedingEvent,
-    MammalianRecipe,
     MammalianDataset,
-    ReactorType,
+    MammalianRecipe,
+    MeasurementNoise,
+    ProcessNoise,
     ReactionEvolutionTimeseries,
-    NoiseParameters,
+    ReactorType,
+    SimulationResult,
 )
+from dbiolab.mammalian_cellculture_simulation.data_models.noise import (
+    MEASURED_VARIABLES,
+)
+
+SeedLike = Union[int, np.random.SeedSequence, None]
 from dbiolab.mammalian_cellculture_simulation.data_models.reactor import (
     CO2_SOLUBILITY,
     DRY_GAS_PRESSURE,
@@ -36,29 +47,72 @@ class MammalianCellcultureReactor:
 
     def __init__(self, reactor_type: ReactorType):
         self.reactor_type = reactor_type
-        self.seed: Optional[int] = None
+
+    def simulate(
+        self, recipe: MammalianRecipe, seed: SeedLike = None
+    ) -> SimulationResult:
+        """Simulate one run and return its true and measured trajectories.
+
+        Parameters
+        ----------
+        recipe : MammalianRecipe
+            The recipe; its ``noise_parameters`` set the noise (the default
+            ``NoiseParameters()`` is noiseless).
+        seed : int, np.random.SeedSequence or None
+            Seed for reproducible noise. Each noise source draws from its own
+            stream, so switching one source off does not change the others.
+
+        Returns
+        -------
+        SimulationResult
+            The true trajectory (with batch, process and actuator noise) and
+            the measured one (with measurement noise on top).
+        """
+        sequence = (
+            seed
+            if isinstance(seed, np.random.SeedSequence)
+            else np.random.SeedSequence(seed)
+        )
+        batch_rng, process_rng, actuator_rng, measurement_rng = (
+            np.random.default_rng(stream) for stream in sequence.spawn(4)
+        )
+        noise = recipe.noise_parameters
+        run_recipe = self._apply_batch_variability(recipe, noise.batch, batch_rng)
+        run_recipe = self._apply_actuator_noise(
+            run_recipe, noise.actuator, actuator_rng
+        )
+        multipliers = self._process_multipliers(
+            noise.process, recipe.runtime, process_rng
+        )
+        true = self._solve_odes(run_recipe, multipliers)
+        measured = self._measure(true, noise.measurement, measurement_rng)
+        return SimulationResult(true=true, measured=measured)
 
     def run_experiment(
-        self, recipe: MammalianRecipe, seed: Optional[int] = None
+        self, recipe: MammalianRecipe, seed: SeedLike = None
     ) -> ReactionEvolutionTimeseries:
-        """Run a cell culture simulation based on the provided recipe.
+        """Simulate one run and return what the assays measure.
 
         Parameters
         ----------
         recipe : MammalianRecipe
             The dataclass with the recipe parameters.
+        seed : int, np.random.SeedSequence or None
+            Seed for reproducible noise.
+
+        Returns
+        -------
+        ReactionEvolutionTimeseries
+            The measured trajectory (see ``simulate`` for the true one).
         """
-        self.seed = seed
-        solution = self._solve_odes(recipe)
-        solution = self._add_process_noise(solution, recipe.noise_parameters)
-        solution = self._add_measurement_noise(solution, recipe.noise_parameters)
-        solution = self._clip_to_physical_bounds(solution)
-        return solution
+        return self.simulate(recipe, seed).measured
 
     def run_dataset(
         self, dataset: MammalianDataset, seed: Optional[int] = None
     ) -> MammalianDataset:
         """Run simulations for all recipes in the provided dataset.
+
+        Every recipe gets its own independent noise, derived from ``seed``.
 
         Parameters
         ----------
@@ -70,137 +124,236 @@ class MammalianCellcultureReactor:
         Returns
         -------
         MammalianDataset
-            A new dataset containing the reaction evolution timeseries results for each recipe.
+            A new dataset containing the measured timeseries for each recipe.
         """
+        streams = np.random.SeedSequence(seed).spawn(len(dataset.data))
         result: List[ReactionEvolutionTimeseries] = []
-        for recipe in dataset.data:
+        for recipe, stream in zip(dataset.data, streams):
             if not isinstance(recipe, MammalianRecipe):
                 raise TypeError(f"Expected MammalianRecipe, got {type(recipe)}")
-            result.append(self.run_experiment(recipe, seed=seed))
+            result.append(self.run_experiment(recipe, seed=stream))
         return MammalianDataset(data=result)  # type: ignore
 
-    def _solve_odes(self, recipe: MammalianRecipe) -> ReactionEvolutionTimeseries:
-        current_time = 0.0
-        current_y = recipe.initial_conditions.as_list()
+    # ------------------------------------------------------------------ #
+    # Noise sources acting on the run
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _lognormal_factor(cv: float, rng: np.random.Generator) -> float:
+        """A random factor with mean 1 and coefficient of variation ``cv``."""
+        if cv <= 0.0:
+            return 1.0
+        sigma = np.sqrt(np.log1p(cv**2))
+        return float(np.exp(sigma * rng.standard_normal() - sigma**2 / 2.0))
+
+    def _apply_batch_variability(
+        self,
+        recipe: MammalianRecipe,
+        batch: BatchVariability,
+        rng: np.random.Generator,
+    ) -> MammalianRecipe:
+        celltype = recipe.celltype
+        productivity = self._lognormal_factor(batch.productivity, rng)
+        varied = replace(
+            celltype,
+            mu_max=celltype.mu_max * self._lognormal_factor(batch.mu_max, rng),
+            y_product_non_growth=celltype.y_product_non_growth * productivity,
+            y_product_from_viable=celltype.y_product_from_viable * productivity,
+            q_o2=celltype.q_o2 * self._lognormal_factor(batch.q_o2, rng),
+            k_death_max=celltype.k_death_max
+            * self._lognormal_factor(batch.k_death_max, rng),
+            y_cells_glc=celltype.y_cells_glc
+            * self._lognormal_factor(batch.y_cells_glc, rng),
+        )
+        # Inoculum and medium batch
+        initial = recipe.initial_conditions.to_dict()
+        seeding = self._lognormal_factor(batch.seeding_density, rng)
+        for key in ("x_total", "x_viable", "x_dead"):
+            initial[key] *= seeding
+        initial["c_glc"] *= self._lognormal_factor(batch.initial_glucose, rng)
+        initial["c_gln"] *= self._lognormal_factor(batch.initial_glutamine, rng)
+        return replace(
+            recipe,
+            celltype=varied,
+            initial_conditions=FeedConcentrations.from_dict(initial),
+        )
+
+    def _apply_actuator_noise(
+        self,
+        recipe: MammalianRecipe,
+        actuator: ActuatorNoise,
+        rng: np.random.Generator,
+    ) -> MammalianRecipe:
+        # Per-run offsets: every setpoint is missed by the same amount
+        dt = actuator.temperature * rng.standard_normal()
+        dph = actuator.ph * rng.standard_normal()
+        stirring = self._lognormal_factor(actuator.stirring, rng)
+
+        def shifted(value, offset=0.0, factor=1.0):
+            return None if value is None else value * factor + offset
+
+        feeds = []
+        for event in recipe.feeding_strategy:
+            dose = self._lognormal_factor(actuator.feed, rng)
+            amounts = FeedConcentrations.from_dict(
+                {
+                    key: value * dose
+                    for key, value in event.feed_concentrations.to_dict().items()
+                }
+            )
+            feeds.append(
+                replace(
+                    event,
+                    feed_concentrations=amounts,
+                    volume_fraction=event.volume_fraction * dose,
+                    temperature=shifted(event.temperature, dt),
+                    ph_value=shifted(event.ph_value, dph),
+                    stirring_rate=shifted(event.stirring_rate, factor=stirring),
+                )
+            )
+        return replace(
+            recipe,
+            temperature=recipe.temperature + dt,
+            ph_value=recipe.ph_value + dph,
+            stirring_rate=recipe.stirring_rate * stirring,
+            feeding_strategy=feeds,
+        )
+
+    @staticmethod
+    def _process_multipliers(
+        process: ProcessNoise, runtime: float, rng: np.random.Generator
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Piecewise-constant rate multipliers from an Ornstein-Uhlenbeck process.
+
+        Returns the start times of the pieces and the growth and production
+        multipliers on each piece. Without process noise there is one piece
+        with multipliers of 1.
+        """
+        if process.growth <= 0.0 and process.production <= 0.0:
+            return np.array([0.0]), np.array([1.0]), np.array([1.0])
+        starts = np.arange(0.0, runtime, process.update_interval)
+        decay = np.exp(-process.update_interval / process.correlation_time)
+        multipliers = []
+        for sigma in (process.growth, process.production):
+            xi = np.empty(len(starts))
+            xi[0] = sigma * rng.standard_normal()
+            for k in range(1, len(starts)):
+                xi[k] = (
+                    decay * xi[k - 1]
+                    + sigma * np.sqrt(1.0 - decay**2) * rng.standard_normal()
+                )
+            # Mean-preserving: E[exp(xi)] = 1
+            multipliers.append(np.exp(xi - sigma**2 / 2.0))
+        return starts, multipliers[0], multipliers[1]
+
+    # ------------------------------------------------------------------ #
+    # Integration
+    # ------------------------------------------------------------------ #
+
+    def _solve_odes(
+        self,
+        recipe: MammalianRecipe,
+        multipliers: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    ) -> ReactionEvolutionTimeseries:
+        """Integrate the run and sample it on the measurement grid.
+
+        The run is split at feeds and at process-noise updates; within each
+        piece the setpoints and rate multipliers are constant. A sample at a
+        feed time is taken just before the feed.
+        """
+        noise_starts, growth, production = multipliers
+        sample_times = np.arange(0.0, recipe.runtime, recipe.measurement_intervals)
+        sample_times = np.append(sample_times, recipe.runtime)
+        feeds = sorted(recipe.feeding_strategy, key=lambda e: e.time_point)
+        boundaries = sorted(
+            {0.0, recipe.runtime}
+            | {e.time_point for e in feeds if 0.0 < e.time_point < recipe.runtime}
+            | {t for t in noise_starts if 0.0 < t < recipe.runtime}
+        )
+
+        state = np.array(recipe.initial_conditions.as_list(), dtype=float)
         temperature, ph_value = recipe.temperature, recipe.ph_value
         stirring_rate = recipe.stirring_rate
-        solutions = ReactionEvolutionTimeseries(name=recipe.name)
-        for feeding_event in recipe.feeding_strategy:
-            partial_solution, current_time = self._calculate_partial_solution(
-                current_time,
-                feeding_event.time_point,
-                current_y,
-                recipe,
-                temperature,
-                ph_value,
-                stirring_rate,
+        times, states, setpoints = [0.0], [state.copy()], [(temperature, stirring_rate)]
+        next_feed = 0
+        for start, end in zip(boundaries[:-1], boundaries[1:]):
+            # Feeds at the start of this piece: add them, switch setpoints
+            while next_feed < len(feeds) and feeds[next_feed].time_point <= start:
+                event = feeds[next_feed]
+                state = self._apply_feed(state, event)
+                if event.temperature is not None:
+                    temperature = event.temperature
+                if event.ph_value is not None:
+                    ph_value = event.ph_value
+                if event.stirring_rate is not None:
+                    stirring_rate = event.stirring_rate
+                next_feed += 1
+            piece = int(np.searchsorted(noise_starts, start, side="right")) - 1
+            samples = sample_times[(sample_times > start) & (sample_times <= end)]
+            # Always evaluate the end of the piece: the next piece starts there
+            t_eval = np.unique(np.append(samples, end))
+            solution = solve_ivp(
+                fun=self._ode_system,
+                t_span=(start, end),
+                y0=state,
+                t_eval=t_eval,
+                # Stiff: dissolved oxygen equilibrates within minutes
+                method="LSODA",
+                rtol=1e-6,
+                atol=1e-12,
+                args=(
+                    recipe,
+                    temperature,
+                    ph_value,
+                    stirring_rate,
+                    growth[piece],
+                    production[piece],
+                ),
             )
-            solutions.extend(partial_solution)
-            current_y = self._update_conditions_with_feed(
-                partial_solution, feeding_event
-            )
-            # A feeding event may also shift the temperature, pH and/or
-            # stirring setpoints
-            if feeding_event.temperature is not None:
-                temperature = feeding_event.temperature
-            if feeding_event.ph_value is not None:
-                ph_value = feeding_event.ph_value
-            if feeding_event.stirring_rate is not None:
-                stirring_rate = feeding_event.stirring_rate
-        partial_solution, current_time = self._calculate_partial_solution(
-            current_time,
-            recipe.runtime,
-            current_y,
-            recipe,
-            temperature,
-            ph_value,
-            stirring_rate,
-        )
-        solutions.extend(partial_solution)
-        return solutions
+            if not solution.success:
+                raise RuntimeError(f"ODE integration failed: {solution.message}")
+            is_sample = np.isin(solution.t, samples)
+            times.extend(solution.t[is_sample])
+            states.extend(solution.y.T[is_sample])
+            setpoints.extend([(temperature, stirring_rate)] * int(is_sample.sum()))
+            state = solution.y[:, -1].copy()
 
-    def _calculate_partial_solution(
-        self,
-        start_time: float,
-        end_time: float,
-        current_y: list[float],
-        recipe: MammalianRecipe,
-        temperature: float,
-        ph_value: float,
-        stirring_rate: float,
-    ):
-        time_segment = (start_time, end_time)
-        n_measurements = int((end_time - start_time) / recipe.measurement_intervals)
-        measurement_times = np.linspace(start_time, end_time, n_measurements)
-        solution = solve_ivp(
-            fun=self._ode_system,
-            t_span=time_segment,
-            y0=current_y,
-            t_eval=measurement_times,
-            # Stiff: dissolved oxygen equilibrates within minutes
-            method="LSODA",
-            rtol=1e-6,
-            atol=1e-12,
-            args=(recipe, temperature, ph_value, stirring_rate),
-        )
-        current_time = end_time
-        purity = self._calculate_purity(solution)
+        y = np.array(states).T
         o2_fraction = np.array(
             [
                 self._gas_o2_fraction(
-                    stirring_rate,
-                    self._oxygen_uptake(state, recipe, temperature),
-                    recipe.do_setpoint,
+                    rpm, self._oxygen_uptake(s, recipe, t), recipe.do_setpoint
                 )
-                for state in solution.y.T
+                for s, (t, rpm) in zip(y.T, setpoints)
             ]
         )
-        partial_solution = ReactionEvolutionTimeseries(
+        return ReactionEvolutionTimeseries(
             name=recipe.name,
-            timepoints=solution.t,
-            c_product=solution.y[0],
-            x_total=solution.y[1],
-            x_viable=solution.y[2],
-            x_dead=solution.y[3],
-            c_glc=solution.y[4],
-            c_gln=solution.y[5],
-            c_lac=solution.y[6],
-            c_ammonia=solution.y[7],
-            c_aggregates=solution.y[8],
-            c_glycated=solution.y[9],
-            c_hcp=solution.y[10],
-            c_o2=solution.y[11],
-            c_co2=solution.y[12],
+            timepoints=np.array(times),
+            c_product=y[0],
+            x_total=y[1],
+            x_viable=y[2],
+            x_dead=y[3],
+            c_glc=y[4],
+            c_gln=y[5],
+            c_lac=y[6],
+            c_ammonia=y[7],
+            c_aggregates=y[8],
+            c_glycated=y[9],
+            c_hcp=y[10],
+            c_o2=y[11],
+            c_co2=y[12],
             o2_fraction=o2_fraction,
-            purity=purity,
+            purity=self._calculate_purity(y),
         )
-        return partial_solution, current_time
 
-    def _update_conditions_with_feed(
-        self,
-        partial_solution: ReactionEvolutionTimeseries,
-        feeding_event: FeedingEvent,
-    ) -> list[float]:
-        # The feed adds its amounts, then everything is diluted by its volume
-        dilution = 1.0 + feeding_event.volume_fraction
-        final_conditions = [
-            partial_solution.c_product[-1]
-            + feeding_event.feed_concentrations.c_product,
-            partial_solution.x_total[-1] + feeding_event.feed_concentrations.x_total,
-            partial_solution.x_viable[-1] + feeding_event.feed_concentrations.x_viable,
-            partial_solution.x_dead[-1] + feeding_event.feed_concentrations.x_dead,
-            partial_solution.c_glc[-1] + feeding_event.feed_concentrations.c_glc,
-            partial_solution.c_gln[-1] + feeding_event.feed_concentrations.c_gln,
-            partial_solution.c_lac[-1] + feeding_event.feed_concentrations.c_lac,
-            partial_solution.c_ammonia[-1]
-            + feeding_event.feed_concentrations.c_ammonia,
-            partial_solution.c_aggregates[-1],  # Aggregates not fed
-            partial_solution.c_glycated[-1],  # Glycated product not fed
-            partial_solution.c_hcp[-1],  # Host cell protein not fed
-            partial_solution.c_o2[-1] + feeding_event.feed_concentrations.c_o2,
-            partial_solution.c_co2[-1] + feeding_event.feed_concentrations.c_co2,
-        ]
-        return [value / dilution for value in final_conditions]
+    @staticmethod
+    def _apply_feed(state: np.ndarray, feeding_event: FeedingEvent) -> np.ndarray:
+        """Add the feed's amounts, then dilute everything by its volume."""
+        added = np.array(feeding_event.feed_concentrations.as_list(), dtype=float)
+        # Aggregates, glycated product and host cell protein are not fed
+        added[8:11] = 0.0
+        return (state + added) / (1.0 + feeding_event.volume_fraction)
 
     def _ode_system(
         self,
@@ -210,9 +363,25 @@ class MammalianCellcultureReactor:
         temperature: float,
         ph_value: float,
         stirring_rate: float,
+        growth_multiplier: float = 1.0,
+        production_multiplier: float = 1.0,
     ):
         # x_* here is the cell density and c_* the concentrations of the metabolites
-        (_, _, x_viable, x_dead, c_glc, c_gln, c_lac, c_ammonia, _, _, _, c_o2, c_co2) = x
+        (
+            _,
+            _,
+            x_viable,
+            x_dead,
+            c_glc,
+            c_gln,
+            c_lac,
+            c_ammonia,
+            _,
+            _,
+            _,
+            c_o2,
+            c_co2,
+        ) = x
         # Dissolved oxygen limits growth and production
         c_o2_pos = max(c_o2, 0.0)
         oxygen_factor = c_o2_pos / (recipe.celltype.k_sat_o2 + c_o2_pos)
@@ -232,6 +401,7 @@ class MammalianCellcultureReactor:
             * oxygen_factor
             * co2_factor
             / (1.0 + gradients)
+            * growth_multiplier  # process noise
         )
         c_lac_pos = max(c_lac, 0.0)
         c_ammonia_pos = max(c_ammonia, 0.0)
@@ -315,6 +485,7 @@ class MammalianCellcultureReactor:
             * co2_factor
             * lactate_product_inhibition
             * ammonia_product_inhibition
+            * production_multiplier  # process noise
         )
         c_product = x[0]  # Get current product concentration
         product_aggregation = celltype.k_agg_product * (c_product**2)
@@ -364,10 +535,14 @@ class MammalianCellcultureReactor:
         )
         c_lac_gradient = -lactate_yield * c_glc_gradient - lactate_uptake
         # Glutamine consumed by cells for growth, maintenance and product
-        c_gln_gradient_no_degrad = x_viable * (
-            (-current_growth_rate / celltype.y_cells_gln)
-            - celltype.m_gln * metabolism_factor
-        ) - celltype.y_gln_product * product_formation
+        c_gln_gradient_no_degrad = (
+            x_viable
+            * (
+                (-current_growth_rate / celltype.y_cells_gln)
+                - celltype.m_gln * metabolism_factor
+            )
+            - celltype.y_gln_product * product_formation
+        )
         c_gln_degrad = recipe.celltype.k_deg_gln * c_gln
         c_gln_gradient = c_gln_gradient_no_degrad - c_gln_degrad
         c_ammonia_gradient = (
@@ -401,9 +576,7 @@ class MammalianCellcultureReactor:
             - self.reactor_type.co2_stripping_rate(stirring_rate)
             * (
                 c_co2
-                - self.reactor_type.gas_co2_fraction
-                * DRY_GAS_PRESSURE
-                * CO2_SOLUBILITY
+                - self.reactor_type.gas_co2_fraction * DRY_GAS_PRESSURE * CO2_SOLUBILITY
             ),
         ]
 
@@ -514,7 +687,6 @@ class MammalianCellcultureReactor:
         smoothness_factor_t_l: float,
         smoothness_factor_t_r: float,
     ) -> float:
-        
 
         left_part = np.exp(
             -steepness_factor_t_l
@@ -556,231 +728,83 @@ class MammalianCellcultureReactor:
         factor = np.clip(factor, min_factor, None)
         return float(factor)
 
-    def _calculate_purity(self, solution) -> np.ndarray:
-        """Calculate product purity: active product over all protein.
-
-        All protein is the product, its aggregates, glycated product and host
-        cell protein.
-
-        Parameters
-        ----------
-        solution : scipy.integrate.OdeResult
-            The ODE solution from solve_ivp.
-
-        Returns
-        -------
-        np.ndarray
-            Product purity at each timepoint, clipped to [0, 1].
-        """
-        c_product = solution.y[0]
-        c_aggregates = solution.y[8]
-        c_glycated = solution.y[9]
-        c_hcp = solution.y[10]
+    @staticmethod
+    def _calculate_purity(y: np.ndarray) -> np.ndarray:
+        """Active product over all protein (product, aggregates, glycated
+        product and host cell protein), clipped to [0, 1]."""
+        c_product, c_aggregates, c_glycated, c_hcp = y[0], y[8], y[9], y[10]
         total_protein = c_product + c_aggregates + c_glycated + c_hcp
-        purity = c_product / (total_protein + 1e-12)
-        purity = np.clip(purity, 0, 1)
+        return np.clip(c_product / (total_protein + 1e-12), 0.0, 1.0)
 
-        return purity
+    # ------------------------------------------------------------------ #
+    # Measurement
+    # ------------------------------------------------------------------ #
 
-    def _add_process_noise(
-        self, solution: ReactionEvolutionTimeseries, noise_params: NoiseParameters
+    @staticmethod
+    def _measure(
+        true: ReactionEvolutionTimeseries,
+        measurement: MeasurementNoise,
+        rng: np.random.Generator,
     ) -> ReactionEvolutionTimeseries:
-        """Add process noise (Brownian motion) to the solution.
+        """What the assays report.
 
-        Process noise represents stochastic variations in the biological process
-        and is modeled as cumulative Brownian motion increments, scaled relative
-        to the current state value.
-
-        Parameters
-        ----------
-        solution : ReactionEvolutionTimeseries
-            The deterministic solution from ODE solving.
-        noise_params : NoiseParameters
-            The noise parameters (relative std dev).
-
-        Returns
-        -------
-        ReactionEvolutionTimeseries
-            Solution with process noise added.
+        Every value gets a per-run calibration factor and a per-sample
+        relative (lognormal, mean-preserving) error, plus an absolute
+        (Gaussian) error; it is never negative. The cell counter measures
+        total cells and viability: viable = total x viability, dead = total -
+        viable. For purity, the errors act on the impurity fraction. An assay
+        without noise reports the true values exactly.
         """
-        n_timepoints = len(solution.timepoints)
-        dt = np.diff(solution.timepoints)
 
-        state_noise_pairs = self._get_state_noise_pairs(
-            solution, noise_params, noise_type="process"
-        )
+        def is_noisy(name: str) -> bool:
+            return (
+                measurement.relative[name] > 0.0
+                or measurement.absolute[name] > 0.0
+                or measurement.calibration[name] > 0.0
+            )
 
-        for state_array, noise_std in state_noise_pairs:
-            if noise_std > 0:
-                # Scale noise relative to current value
-                relative_noise = state_array[:-1] * noise_std
-                brownian_increments = self._generate_brownian_motion(
-                    1.0, n_timepoints - 1, dt
-                )
-                state_array[1:] += relative_noise * brownian_increments
+        def lognormal(cv: float, size=None):
+            sigma = np.sqrt(np.log1p(cv**2))
+            return np.exp(sigma * rng.standard_normal(size) - sigma**2 / 2.0)
 
-        return solution
+        def assay(name: str, values: np.ndarray) -> np.ndarray:
+            values = np.asarray(values, dtype=float)
+            if not is_noisy(name):
+                return values.copy()
+            relative = measurement.relative[name]
+            absolute = measurement.absolute[name]
+            calibration = measurement.calibration[name]
+            noisy = values * (lognormal(calibration) if calibration > 0.0 else 1.0)
+            if relative > 0.0:
+                noisy = noisy * lognormal(relative, len(values))
+            if absolute > 0.0:
+                noisy = noisy + absolute * rng.standard_normal(len(values))
+            noisy = np.clip(noisy, 0.0, None)
+            if measurement.censor_below_detection and absolute > 0.0:
+                noisy = np.where(noisy < 3.0 * absolute, np.nan, noisy)
+            return noisy
 
-    def _add_measurement_noise(
-        self, solution: ReactionEvolutionTimeseries, noise_params: NoiseParameters
-    ) -> ReactionEvolutionTimeseries:
-        """Add measurement noise to the solution at each timepoint.
+        measured = replace(true)
+        for name in MEASURED_VARIABLES:
+            if name not in ("x_total", "viability", "purity"):
+                setattr(measured, name, assay(name, getattr(true, name)))
 
-        Measurement noise represents sensor/measurement inaccuracies and is
-        modeled as Gaussian white noise scaled relative to the measured value.
+        # Cell counter: total cells and viability from the same sample
+        if is_noisy("x_total") or is_noisy("viability"):
+            x_total = np.asarray(true.x_total, dtype=float)
+            viability = np.divide(
+                true.x_viable,
+                x_total,
+                out=np.zeros_like(x_total),
+                where=x_total > 0,
+            )
+            measured.x_total = assay("x_total", x_total)
+            measured_viability = np.clip(assay("viability", viability), 0.0, 1.0)
+            measured.x_viable = measured.x_total * measured_viability
+            measured.x_dead = measured.x_total - measured.x_viable
 
-        Parameters
-        ----------
-        solution : ReactionEvolutionTimeseries
-            The solution (possibly with process noise).
-        noise_params : NoiseParameters
-            The noise parameters (relative std dev).
-
-        Returns
-        -------
-        ReactionEvolutionTimeseries
-            Solution with measurement noise added.
-        """
-        state_noise_pairs = self._get_state_noise_pairs(
-            solution, noise_params, noise_type="measurement"
-        )
-
-        for state_array, noise_std in state_noise_pairs:
-            if noise_std > 0:
-                # Scale noise relative to current value
-                relative_noise = state_array * noise_std
-                gaussian_noise = self._generate_gaussian_noise(1.0, len(state_array))
-                state_array += relative_noise * gaussian_noise
-
-        return solution
-
-    def _get_state_noise_pairs(
-        self,
-        solution: ReactionEvolutionTimeseries,
-        noise_params: NoiseParameters,
-        noise_type: str,
-    ) -> list:
-        """Get list of (state_array, noise_std) tuples for all species.
-
-        Parameters
-        ----------
-        solution : ReactionEvolutionTimeseries
-            The solution object containing all state arrays.
-        noise_params : NoiseParameters
-            The noise parameters object.
-        noise_type : str
-            Either "process" or "measurement" to select noise type.
-
-        Returns
-        -------
-        list
-            List of (state_array, noise_std) tuples.
-        """
-        prefix = f"{noise_type}_noise_"
-        species = [
-            ("c_product", solution.c_product),
-            ("x_total", solution.x_total),
-            ("x_viable", solution.x_viable),
-            ("x_dead", solution.x_dead),
-            ("c_glc", solution.c_glc),
-            ("c_gln", solution.c_gln),
-            ("c_lac", solution.c_lac),
-            ("c_ammonia", solution.c_ammonia),
-            ("c_aggregates", solution.c_aggregates),
-            ("c_glycated", solution.c_glycated),
-            ("c_hcp", solution.c_hcp),
-            ("c_o2", solution.c_o2),
-            ("c_co2", solution.c_co2),
-        ]
-
-        return [
-            (state_array, getattr(noise_params, f"{prefix}{name}"))
-            for name, state_array in species
-        ]
-
-    def _generate_brownian_motion(
-        self, noise_std: float, n_steps: int, dt_array: np.ndarray
-    ) -> np.ndarray:
-        """Generate cumulative Brownian motion increments.
-
-        When noise_std=1.0, returns normalized cumulative increments (unit variance).
-        Scaling should be done externally for relative noise.
-
-        Parameters
-        ----------
-        noise_std : float
-            Standard deviation coefficient (typically 1.0 for relative noise).
-        n_steps : int
-            Number of steps.
-        dt_array : np.ndarray
-            Array of time intervals.
-
-        Returns
-        -------
-        np.ndarray
-            Cumulative Brownian motion increments.
-        """
-        rng = np.random.default_rng(seed=self.seed)
-        if self.seed is not None:
-            self.seed += 1  # ensure different noise each time
-        increments = rng.normal(0, noise_std, n_steps) * np.sqrt(dt_array)
-        return np.cumsum(increments)
-
-    def _generate_gaussian_noise(self, noise_std: float, n_points: int) -> np.ndarray:
-        """Generate Gaussian white noise.
-
-        When noise_std=1.0, returns normalized Gaussian noise (unit variance).
-        Scaling should be done externally for relative noise.
-
-        Parameters
-        ----------
-        noise_std : float
-            Standard deviation coefficient (typically 1.0 for relative noise).
-        n_points : int
-            Number of noise points.
-
-        Returns
-        -------
-        np.ndarray
-            Gaussian white noise array.
-        """
-        rng = np.random.default_rng(seed=self.seed)
-        if self.seed is not None:
-            self.seed += 1  # ensure different noise each time
-        return rng.normal(0, noise_std, n_points)
-
-    def _clip_to_physical_bounds(
-        self, solution: ReactionEvolutionTimeseries
-    ) -> ReactionEvolutionTimeseries:
-        """Clip all state variables to non-negative values for physical validity.
-
-        Ensures that noise does not produce unphysical negative concentrations
-        or cell densities.
-
-        Parameters
-        ----------
-        solution : ReactionEvolutionTimeseries
-            The solution with noise applied.
-
-        Returns
-        -------
-        ReactionEvolutionTimeseries
-            Solution with all values clipped to [0, ∞).
-        """
-        solution.c_product = np.clip(solution.c_product, 0, None)
-        solution.x_total = np.clip(solution.x_total, 0, None)
-        solution.x_viable = np.clip(solution.x_viable, 0, None)
-        solution.x_dead = np.clip(solution.x_dead, 0, None)
-        solution.c_glc = np.clip(solution.c_glc, 0, None)
-        solution.c_gln = np.clip(solution.c_gln, 0, None)
-        solution.c_lac = np.clip(solution.c_lac, 0, None)
-        solution.c_ammonia = np.clip(solution.c_ammonia, 0, None)
-        solution.c_aggregates = np.clip(solution.c_aggregates, 0, None)
-        solution.c_glycated = np.clip(solution.c_glycated, 0, None)
-        solution.c_hcp = np.clip(solution.c_hcp, 0, None)
-        solution.c_o2 = np.clip(solution.c_o2, 0, None)
-        solution.c_co2 = np.clip(solution.c_co2, 0, None)
-        # Purity is already clipped in _calculate_purity, but ensure it's in [0, 1]
-        solution.purity = np.clip(solution.purity, 0, 1)
-
-        return solution
+        # Purity: errors on the impurity fraction, so no bias near 100 %
+        if is_noisy("purity"):
+            impurity = assay("purity", 1.0 - np.asarray(true.purity))
+            measured.purity = 1.0 - np.clip(impurity, 0.0, 1.0)
+        return measured

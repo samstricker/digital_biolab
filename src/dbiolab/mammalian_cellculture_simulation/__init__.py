@@ -8,6 +8,11 @@ from .data_models import (
     ReactionEvolutionTimeseries,
     ReactorType,
     NoiseParameters,
+    ActuatorNoise,
+    BatchVariability,
+    MeasurementNoise,
+    ProcessNoise,
+    SimulationResult,
 )
 from .cellculture_simulator import MammalianCellcultureReactor
 from .visualization import plot_reaction_evolution_timeseries, plot_setpoints
@@ -26,6 +31,11 @@ __all__ = [
     "MammalianCellcultureReactor",
     "MammalianRecipe",
     "NoiseParameters",
+    "ActuatorNoise",
+    "BatchVariability",
+    "MeasurementNoise",
+    "ProcessNoise",
+    "SimulationResult",
     "plot_reaction_evolution_timeseries",
     "plot_setpoints",
     "ReactionEvolutionTimeseries",

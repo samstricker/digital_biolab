@@ -214,20 +214,14 @@ $$\frac{dc_{HCP}}{dt} = hcp_{per\_cell} \cdot k_{lysis} \cdot x_{dead}$$
 - $pH_{opt,P}$, $r_{pH,P}$, steepness/smoothness: pH parameters for product formation [`ph_opt_product`, `ph_robustness_factor_product`, `steepness_factor_ph_l_product`, `steepness_factor_ph_r_product`, `smoothness_factor_ph_l_product`, `smoothness_factor_ph_r_product`]
 
 ### Noise in Simulations
-There are two types of noise that can be added to the simulations to create more realistic and variable outcomes, mimicking the inherent stochasticity in biological systems and measurement processes.
+Noise enters where it arises physically. Everything defaults to zero: `NoiseParameters()` is the noiseless, deterministic model, and `NoiseParameters.typical()` gives levels typical of CHO fed-batch processes. Every level can be set individually (fractions, 0.05 = 5 %).
 
-**Process Noise (Brownian Motion):**
-Process noise represents intrinsic stochasticity in biological systems. It is modeled as cumulative Brownian motion increments, scaled relative to the current state value:
+| source | parameters | model |
+|---|---|---|
+| Batch variability | `batch.mu_max`, `productivity`, `q_o2`, `k_death_max`, `y_cells_glc`, `seeding_density`, `initial_glucose`, `initial_glutamine` | once per run, the parameter or starting value is multiplied by a lognormal factor with mean 1 and the given coefficient of variation |
+| Process noise | `process.growth`, `production`, `correlation_time`, `update_interval` | growth and production rates are multiplied by $e^{\xi(t)}$, $\xi$ an Ornstein-Uhlenbeck process, piecewise constant over the update interval; acts inside the dynamics, so all states stay consistent |
+| Actuator noise | `actuator.temperature` [C], `ph` [pH], `stirring`, `feed` | per run, setpoints are missed by an offset (temperature, pH) or a relative error (stirring); every feed has a relative dosing error |
+| Measurement noise | `measurement.relative[var]`, `absolute[var]`, `calibration[var]`, `censor_below_detection` | the true value times a per-run calibration factor and a per-sample lognormal, mean-preserving error, plus a Gaussian absolute error (three times it is the detection limit); never negative. The cell counter measures `x_total` and `viability` (viable = total x viability, dead = total - viable); for `purity` the errors act on the impurity fraction. Optionally, values below the detection limit are reported as NaN |
 
-$$dX_t = X_t \cdot \sigma_{process} \sqrt{dt} \cdot dW_t$$
-
-where $X_t$ is the current state value, $\sigma_{process}$ is the relative noise intensity (dimensionless), $dW_t$ is a Wiener process increment, and $dt$ is the time step. The noise scales with the variable magnitude, creating realistic proportional variability.
-
-**Measurement Noise (Gaussian White Noise):**
-Measurement noise represents sensor/analytical inaccuracies. It is modeled as independent Gaussian random values at each timepoint, scaled relative to the measured value:
-
-$$X_{measured} = X_{true} + X_{true} \cdot \sigma_{measurement} \cdot \mathcal{N}(0, 1)$$
-
-where $X_{true}$ is the true value and $\sigma_{measurement}$ is the relative measurement noise standard deviation (dimensionless). This noise is proportional to the measurement magnitude and uncorrelated across timepoints and species.
-
+`MammalianCellcultureReactor.simulate(recipe, seed)` returns a `SimulationResult` with the `true` trajectory (batch, process and actuator noise) and the `measured` one (measurement noise on top); `run_experiment` returns the measured one. Each source draws from its own random stream, so switching one off does not change the others, and every recipe in `run_dataset` gets independent noise. Reasonable ranges for every setting and an analysis of each source are in `research/noise_analysis.ipynb`.
 

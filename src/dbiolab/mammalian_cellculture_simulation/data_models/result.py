@@ -184,3 +184,20 @@ class ReactionEvolutionTimeseries:
         """
         path = Path(output_path)
         path.write_text(json.dumps(self.to_dict(), indent=4), encoding="utf-8")
+
+
+@dataclass
+class SimulationResult:
+    """The true and the measured trajectory of one simulated run.
+
+    Parameters
+    ----------
+    true : ReactionEvolutionTimeseries
+        What happened in the reactor: includes batch variability, process and
+        actuator noise, but no measurement noise.
+    measured : ReactionEvolutionTimeseries
+        What the assays report: ``true`` with measurement noise.
+    """
+
+    true: ReactionEvolutionTimeseries
+    measured: ReactionEvolutionTimeseries
