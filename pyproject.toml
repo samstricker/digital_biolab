@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dbiolab"
 version = "0.1.0"
-description = "Add your description here"
+description = "Digital BioLab: in-silico CHO bioprocess simulation (batch, fed-batch, perfusion) for optimisation and control"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

@@ -11,5 +11,7 @@
     "c_glycated": 0.0,
     "c_hcp": 0.0,
     "c_o2": 0.2,
-    "c_co2": 1.228
+    "c_co2": 1.228,
+    "x_lysed": 0.0,
+    "biomaterial": 0.0
 }

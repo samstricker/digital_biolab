@@ -14,6 +14,7 @@
     "y_cells_glc": 3000000.0,
     "y_cells_gln": 15000000.0,
     "m_glc": 2e-09,
+    "k_sat_glc_maintenance": 0.1,
     "m_gln": 0.0,
     "ph_opt": 7.1,
     "ph_robustness_factor": 1.0,
@@ -67,5 +68,7 @@
     "eps_crit": 5.0,
     "t_mix_crit": 90.0,
     "respiratory_quotient": 0.95,
-    "pco2_crit": 150.0
+    "pco2_crit": 150.0,
+    "kt_lysed": 1e-10,
+    "k_i_biomaterial": 150.0
 }

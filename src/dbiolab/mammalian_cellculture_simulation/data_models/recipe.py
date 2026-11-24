@@ -8,6 +8,7 @@ from typing import List, Optional
 from .celltypes import CellType
 from .feeding import FeedConcentrations, FeedingEvent
 from .noise import NoiseParameters
+from .perfusion import PerfusionSettings
 
 
 @dataclass
@@ -26,6 +27,9 @@ class MammalianRecipe:
         The pH level of the cell culture medium.
     stirring_rate : float
         The impeller stirring rate [rpm].
+    perfusion : Optional[PerfusionSettings]
+        Continuous operation: medium feed, cell retention, bleed and the
+        controller deciding the flows. None for batch and fed-batch.
     do_setpoint : Optional[float]
         Dissolved oxygen setpoint as a fraction of air saturation (typical
         0.3-0.5). The sparged gas is enriched with pure oxygen to hold it.
@@ -53,6 +57,7 @@ class MammalianRecipe:
     measurement_intervals: float
     noise_parameters: NoiseParameters
     do_setpoint: Optional[float]
+    perfusion: Optional[PerfusionSettings]
 
     @staticmethod
     def from_json(data_path: str) -> "MammalianRecipe":
@@ -105,6 +110,9 @@ class MammalianRecipe:
                 data.get("noise_parameters", {})
             ),
             do_setpoint=data["do_setpoint"],
+            perfusion=None
+            if data["perfusion"] is None
+            else PerfusionSettings.from_dict(data["perfusion"]),
         )
 
     def to_dict(self) -> dict:
@@ -127,6 +135,7 @@ class MammalianRecipe:
             "measurement_intervals": self.measurement_intervals,
             "noise_parameters": self.noise_parameters.to_dict(),
             "do_setpoint": self.do_setpoint,
+            "perfusion": None if self.perfusion is None else self.perfusion.to_dict(),
         }
 
     def to_json(self, output_path: str) -> None:

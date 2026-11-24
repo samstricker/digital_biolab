@@ -81,6 +81,7 @@ class ReactorType:
 
     def kla(self, stirring_rate: float) -> float:
         """Oxygen transfer coefficient [h^-1] at ``stirring_rate`` [rpm]."""
+        # [van't Riet 1979], non-coalescing media
         per_second = (
             self.kla_constant
             * self.power_per_volume(stirring_rate) ** self.kla_power_exponent
@@ -90,6 +91,7 @@ class ReactorType:
 
     def mixing_time(self, stirring_rate: float) -> float:
         """95 % mixing time [s] at ``stirring_rate`` [rpm]."""
+        # Grenville's correlation [Nienow 1997]
         mean = self.power_per_volume(stirring_rate) / MEDIUM_DENSITY
         ratio = self.impeller_diameter / self.tank_diameter
         return (
@@ -114,12 +116,14 @@ class ReactorType:
         off at most ``Q/V * H`` per hour. Large tanks run at low gas flow per
         volume, so their bubbles saturate and CO2 builds up.
         """
+        # [added]
         liquid_side = CO2_TO_O2_KLA * self.kla(stirring_rate)
         gas_side = self.gas_flow_per_volume() * CO2_GAS_TO_LIQUID
         return 1.0 / (1.0 / liquid_side + 1.0 / gas_side)
 
     def max_dissipation(self, stirring_rate: float) -> float:
         """Local maximum energy dissipation near the impeller [W kg^-1]."""
+        # Peak-to-mean dissipation [Nienow 2006]
         mean = self.power_per_volume(stirring_rate) / MEDIUM_DENSITY
         return self.max_to_mean_dissipation * mean
 

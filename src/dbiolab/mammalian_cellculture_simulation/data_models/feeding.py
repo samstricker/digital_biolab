@@ -38,6 +38,11 @@ class FeedConcentrations:
         Dissolved oxygen concentration [mM].
     c_co2 : float
         Dissolved CO2 concentration [mM].
+    x_lysed : float
+        Lysed cell (debris) density [cells mL^-1].
+    biomaterial : float
+        Inhibitory by-product accumulated by viable cells [a.u., 1e6 cells
+        day mL^-1] (Richelle et al., 2022).
     """
 
     c_product: float
@@ -53,6 +58,8 @@ class FeedConcentrations:
     c_hcp: float
     c_o2: float
     c_co2: float
+    x_lysed: float
+    biomaterial: float
 
     @staticmethod
     def from_json(data_path: str) -> "FeedConcentrations":
@@ -125,6 +132,8 @@ class FeedConcentrations:
             "c_hcp": self.c_hcp,
             "c_o2": self.c_o2,
             "c_co2": self.c_co2,
+            "x_lysed": self.x_lysed,
+            "biomaterial": self.biomaterial,
         }
 
     def as_list(self) -> List[float]:
@@ -135,7 +144,8 @@ class FeedConcentrations:
         List[float]
             The initial conditions as a list of floats.
             Format: [c_product, x_total, x_viable, x_dead, c_glc, c_gln, c_lac,
-                     c_ammonia, c_aggregates, c_glycated, c_hcp, c_o2, c_co2]
+                     c_ammonia, c_aggregates, c_glycated, c_hcp, c_o2, c_co2,
+                     x_lysed, biomaterial]
         """
         return [
             self.c_product,
@@ -151,6 +161,8 @@ class FeedConcentrations:
             self.c_hcp,
             self.c_o2,
             self.c_co2,
+            self.x_lysed,
+            self.biomaterial,
         ]
 
     def copy(self) -> "FeedConcentrations":

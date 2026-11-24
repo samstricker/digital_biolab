@@ -12,6 +12,7 @@ from .noise import (
 )
 from .reactor import ReactorType
 from .recipe import MammalianRecipe
+from .perfusion import ControlAction, PerfusionSettings, RetentionDevice
 from .result import ReactionEvolutionTimeseries, SimulationResult
 
 
@@ -29,4 +30,7 @@ __all__ = [
     "MammalianDataset",
     "ReactorType",
     "SimulationResult",
+    "ControlAction",
+    "PerfusionSettings",
+    "RetentionDevice",
 ]

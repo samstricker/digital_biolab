@@ -132,6 +132,7 @@ BASE_CELLTYPE: Dict = {
     "y_cells_glc": 3000000.0,
     "y_cells_gln": 15000000.0,
     "m_glc": 2e-09,
+    "k_sat_glc_maintenance": 0.1,
     "m_gln": 0.0,
     "ph_opt": 7.1,
     "ph_robustness_factor": 1.0,
@@ -186,6 +187,8 @@ BASE_CELLTYPE: Dict = {
     "t_mix_crit": 90.0,
     "respiratory_quotient": 0.95,
     "pco2_crit": 150.0,
+    "kt_lysed": 1e-10,
+    "k_i_biomaterial": 150.0,
 }
 
 # Ranges for CHO fed-batch, as (low, high, scale); "log" samples
@@ -226,6 +229,9 @@ CELLTYPE_RANGES: Dict[str, Tuple[float, float, str]] = {
     # CO2: respiratory quotient and tolerance (~100-200 mmHg)
     "respiratory_quotient": (0.9, 1.0, "lin"),
     "pco2_crit": (100.0, 200.0, "lin"),
+    # Lysed-cell toxicity and the inhibitory by-product (Richelle et al., 2022)
+    "kt_lysed": (5e-11, 2e-10, "log"),
+    "k_i_biomaterial": (100.0, 250.0, "lin"),
 }
 
 

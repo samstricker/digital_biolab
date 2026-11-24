@@ -43,6 +43,16 @@ class ReactionEvolutionTimeseries:
         Dissolved oxygen concentration [mM].
     c_co2 : NDArray[np.float64]
         Dissolved CO2 concentration [mM].
+    x_lysed : NDArray[np.float64]
+        Lysed cell (debris) density [cells mL^-1].
+    biomaterial : NDArray[np.float64]
+        Inhibitory by-product [a.u.].
+    volume : NDArray[np.float64]
+        Working volume [L].
+    feed_rate, bleed_rate, harvest_rate : NDArray[np.float64]
+        Flow rates applied at each sample [L/day] (zero in fed-batch).
+    harvested_product : NDArray[np.float64]
+        Product collected in the harvest so far [mmol].
     o2_fraction : NDArray[np.float64]
         Oxygen fraction of the sparged gas set by the DO controller [-].
     purity : NDArray[np.float64]
@@ -64,6 +74,13 @@ class ReactionEvolutionTimeseries:
     c_hcp: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     c_o2: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     c_co2: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    x_lysed: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    biomaterial: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    volume: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    feed_rate: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    bleed_rate: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    harvest_rate: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    harvested_product: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     o2_fraction: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     purity: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
 
@@ -89,6 +106,20 @@ class ReactionEvolutionTimeseries:
         self.c_hcp = np.concatenate((self.c_hcp, other.c_hcp))
         self.c_o2 = np.concatenate((self.c_o2, other.c_o2))
         self.c_co2 = np.concatenate((self.c_co2, other.c_co2))
+        for name in (
+            "x_lysed",
+            "biomaterial",
+            "volume",
+            "feed_rate",
+            "bleed_rate",
+            "harvest_rate",
+            "harvested_product",
+        ):
+            setattr(
+                self,
+                name,
+                np.concatenate((getattr(self, name), getattr(other, name))),
+            )
         self.o2_fraction = np.concatenate((self.o2_fraction, other.o2_fraction))
         self.purity = np.concatenate((self.purity, other.purity))
 
@@ -116,6 +147,13 @@ class ReactionEvolutionTimeseries:
             "c_hcp": self.c_hcp.tolist(),
             "c_o2": self.c_o2.tolist(),
             "c_co2": self.c_co2.tolist(),
+            "x_lysed": self.x_lysed.tolist(),
+            "biomaterial": self.biomaterial.tolist(),
+            "volume": self.volume.tolist(),
+            "feed_rate": self.feed_rate.tolist(),
+            "bleed_rate": self.bleed_rate.tolist(),
+            "harvest_rate": self.harvest_rate.tolist(),
+            "harvested_product": self.harvested_product.tolist(),
             "o2_fraction": self.o2_fraction.tolist(),
             "purity": self.purity.tolist(),
         }
@@ -170,6 +208,13 @@ class ReactionEvolutionTimeseries:
             c_hcp=np.array(data["c_hcp"]),
             c_o2=np.array(data["c_o2"]),
             c_co2=np.array(data["c_co2"]),
+            x_lysed=np.array(data["x_lysed"]),
+            biomaterial=np.array(data["biomaterial"]),
+            volume=np.array(data["volume"]),
+            feed_rate=np.array(data["feed_rate"]),
+            bleed_rate=np.array(data["bleed_rate"]),
+            harvest_rate=np.array(data["harvest_rate"]),
+            harvested_product=np.array(data["harvested_product"]),
             o2_fraction=np.array(data["o2_fraction"]),
             purity=np.array(data["purity"]),
         )

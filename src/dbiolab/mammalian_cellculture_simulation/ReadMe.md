@@ -1,17 +1,56 @@
 # Mammalian Cell Culture Simulation
+A mechanistic simulator of CHO cell culture bioprocesses: batch, fed-batch and
+continuous perfusion in stirred tanks from Ambr scale to production, with
+realistic noise, so that optimisation and control strategies can be tested
+in-silico.
+
 ## User Guide
 
-To use the mammalian cell culture simulator, you can follow these steps:
+A run is defined by four objects (each can be saved to and loaded from JSON):
 
-1. **Define Reactor Type**: Create a JSON file specifying the reactor parameters (e.g., scale factor, temperature and pH parameters, noise parameters).
-2. **Define Cell Type**: Create a JSON file specifying the cell parameters (e.g., growth rates, yield coefficients).
-3. **Define Recipe**: Create a JSON file specifying the initial conditions, feeding strategy, and runtime.
-   The recipe also sets the impeller `stirring_rate` [rpm]; like temperature and pH, a feeding event can switch it.
-   Each feeding event adds its `feed_concentrations` (amounts per culture volume before the feed) and then dilutes the whole culture by `1 + volume_fraction`, the feed volume relative to the culture volume. It can optionally set a new `temperature` and/or `ph_value`; the culture runs at that setpoint from the feed on (e.g. a temperature or pH shift). Leave them out (or `null`) to keep the current setpoint.
-4. **Run Simulation**: Use the `MammalianCellCultureSimulator` class to run the simulation with the defined reactor, cell type, and recipe.
-5. **Analyze Results**: The simulator will return time-series data for all state variables, which can be analyzed to evaluate process performance, optimize conditions, or test control strategies.
+1. **`ReactorType`**: the stirred tank: working volume, tank and impeller
+   geometry, aeration, oxygen transfer and residual scale effects. Sample
+   realistic ones from Ambr 15 to production scale with
+   `sample_reactor(scale, rng)` (`scale_library.py`).
+2. **`CellType`**: the cell line's kinetic parameters (growth, death,
+   metabolism, production, sensitivities). `scale_library.BASE_CELLTYPE` is the
+   calibrated CHO base; `sample_celltypes(n, seed)` draws `n` cell lines that
+   cover realistic ranges evenly.
+3. **`MammalianRecipe`**: what the operator does: initial conditions,
+   temperature, pH and stirring setpoints, bolus `FeedingEvent`s (which can
+   also switch the setpoints), the dissolved oxygen setpoint `do_setpoint`,
+   `perfusion` settings for continuous operation (`None` for fed-batch), the
+   runtime and the sampling interval.
+4. **`NoiseParameters`**: batch variability, process, actuator and measurement
+   noise. The default `NoiseParameters()` is noiseless;
+   `NoiseParameters.typical()` gives realistic levels.
 
-You can refer to the `setup/experiment_setup.ipynb` notebook for examples on how to create these JSON files and run the simulation and analyze results.
+```python
+from dbiolab.mammalian_cellculture_simulation import MammalianCellcultureReactor
+
+simulator = MammalianCellcultureReactor(reactor_type)
+result = simulator.simulate(recipe, seed=1)
+result.true       # ReactionEvolutionTimeseries: what happened in the reactor
+result.measured   # what the analytics report (measurement noise on top)
+```
+
+`run_experiment(recipe, seed)` returns only the measured trajectory and
+`run_dataset(dataset, seed)` runs many recipes with independent noise. For
+your own control loop, step a run yourself with `simulator.start(recipe, seed)`
+(see *Continuous Operation*).
+
+| Module | Content |
+|---|---|
+| `cellculture_simulator.py` | `MammalianCellcultureReactor` and `ReactorSession` |
+| `data_models/` | `ReactorType`, `CellType`, `MammalianRecipe`, `FeedingEvent`, `FeedConcentrations`, `NoiseParameters`, `PerfusionSettings`, `RetentionDevice`, `ControlAction`, results |
+| `control.py` | perfusion controllers: `ConstantRates`, `ScheduleController`, `CsprController`, `PIBleedController` |
+| `scale_library.py` | reactor scales and cell type ranges to sample from |
+| `presets.py` | the Richelle et al. (2022) cell model and a bench perfusion reactor |
+| `visualization/` | `plot_reaction_evolution_timeseries`, `plot_setpoints` |
+
+Notebooks: `setup_and_tutorial/tutorial.ipynb` (fed-batch),
+`perfusion_tutorial.ipynb`, `scale_library.ipynb`, `setup.ipynb` (writing the
+JSON inputs) and `research/noise_analysis.ipynb` (noise sources and ranges).
 
 ## Reference
 This simulator is based on the publications:
@@ -21,7 +60,7 @@ ability across bioreactor scales and modes of operation for a mammalian cell bio
 29(1):186–196, 2013.*
 
 
-*A. Martens, M. Neufang, A. Butté, M. von Stosch, A. del R. Chanona, and L. M. Helleckes, “Holistic Bioprocess Development Across Scales Using Multi-Fidelity Batch Bayesian Optimization,” Aug. 14, 2025, arXiv.*
+*A. Martens, M. Neufang, A. Butté, M. von Stosch, A. del R. Chanona, and L. M. Helleckes, “Holistic Bioprocess Development Across Scales Using Multi-Fidelity Batch Bayesian Optimization,” Aug. 14, 2025, arXiv:2508.10970. https://doi.org/10.48550/arXiv.2508.10970*
 
 and was adapted and extended in 2026 by Sam Stricker at Imperial College London.
 
@@ -104,20 +143,20 @@ The liquid-side coefficient is $0.89 \, k_La$ (square root of the ratio of the C
 *A. W. Nienow, "On impeller circulation and mixing effectiveness in the turbulent flow regime," Chem. Eng. Sci. 52(15):2557–2565, 1997.*
 *A. W. Nienow, "Reactor engineering in large scale animal cell culture," Cytotechnology 50:9–33, 2006.*
 
-### Growth Inhibition
+### Residual Scale Effects
 
-Growth inhibition reduces the growth rate:
+The growth rate is finally multiplied by the reactor's `growth_inhibition` factor and the death rate by its `scale_factor`:
 
 $$\mu_{inhibited} = \mu \cdot g_{inhibition}$$
 
-This represents the reduction in growth rate due to reactor-specific conditions (e.g., bioreactor scale effects, oxygen limitations, shear stress).
+They capture residual, non-mechanistic differences between vessels. Oxygen limitation, CO2, mixing and shear are modelled explicitly (see above), so both factors are close to 1 (the scale library samples 0.95-1.0 and 1.0-1.2).
 
 ### Death Rate
 The specific death rate is:
 
-$$k_{death} = k_{death,max} \cdot \frac{k_{death,\mu}}{\mu + k_{death,\mu}} \cdot s_{scale} \cdot \left(1 + \frac{c_{lac}}{k_{death,lac}} + \frac{c_{ammonia}}{k_{death,ammonia}} + k_{death,stress} \cdot \left(1 - f_{temp} \cdot f_{pH}\right) + \left(\frac{\varepsilon_{max}}{\varepsilon_{crit}}\right)^2\right)$$
+$$k_{death} = k_{death,max} \cdot \frac{k_{death,\mu}}{\mu + k_{death,\mu}} \cdot s_{scale} \cdot \left(1 + \frac{c_{lac}}{k_{death,lac}} + \frac{c_{ammonia}}{k_{death,ammonia}} + k_{death,stress} \cdot \left(1 - f_{temp} \cdot f_{pH}\right) + \left(\frac{\varepsilon_{max}}{\varepsilon_{crit}}\right)^2 + \left(\frac{\theta}{\theta_{crit}}\right)^2\right) + k_t \cdot x_{lysed}$$
 
-Lactate (acidification, osmolality) and ammonia toxicity raise the death rate, and so do temperature and pH far from the growth optima (stress), so a culture cannot be parked at harsh conditions without losing cells.
+Lactate (acidification, osmolality) and ammonia toxicity raise the death rate, and so do temperature and pH far from the growth optima (stress), so a culture cannot be parked at harsh conditions without losing cells. Shear near the impeller, poor mixing (mixing time $\theta$) and the debris of lysed cells (Richelle et al., 2022; see *Continuous Operation*) add to it.
 
 
 ### Cell Population Dynamics
@@ -146,10 +185,10 @@ $$\frac{dc_{glycated}}{dt} = k_{glyc} \cdot c_{glc} \cdot c_{product}$$
 Glucose reacts non-enzymatically with the product, so glucose left in the culture degrades product quality and overfeeding glucose has a cost.
 
 #### Glucose Consumption
-$$\frac{dc_{glc}}{dt} = x_{viable} \cdot \left(-\frac{\mu}{y_{cells,glc}} - m_{glc}\right) - y_{glc,product} \cdot q_{P}$$
+$$\frac{dc_{glc}}{dt} = x_{viable} \cdot \left(-\frac{\mu}{y_{cells,glc}} - m_{glc} \frac{c_{glc}}{k_{sat,glc,m} + c_{glc}}\right) - y_{glc,product} \cdot q_{P}$$
 
 #### Glutamine Dynamics
-$$q_{gln} = x_{viable} \cdot \left(\frac{\mu}{y_{cells,gln}} + m_{gln}\right) + y_{gln,product} \cdot q_{P}$$
+$$q_{gln} = x_{viable} \cdot \left(\frac{\mu}{y_{cells,gln}} + m_{gln} \frac{c_{gln}}{k_{sat,gln} + c_{gln}}\right) + y_{gln,product} \cdot q_{P}$$
 
 $$\frac{dc_{gln}}{dt} = -q_{gln} - k_{deg,gln} \cdot c_{gln}$$
 
@@ -184,6 +223,7 @@ $$\frac{dc_{HCP}}{dt} = hcp_{per\_cell} \cdot k_{lysis} \cdot x_{dead}$$
 - $y_{product,ng}$, $y_{product,viable}$: Non-growth- and growth-associated production per viable cell [`y_product_non_growth`, `y_product_from_viable`]
 - $y_{lactate}$, $y_{ammonia}$: Byproduct yield coefficients [`y_lactate`, `y_ammonia`]
 - $m_{glc}$, $m_{gln}$: Maintenance coefficients [`m_glc`, `m_gln`]
+- $k_{sat,glc,m}$: Glucose at which maintenance uptake is halved, so maintenance stops when glucose runs out [`k_sat_glc_maintenance`]
 - $k_{death,max}$, $k_{death,\mu}$: Death rate parameters [`k_death_max`, `k_death_mu`]
 - $k_{lysis}$: Cell lysis rate [`k_lysis`]
 - $k_{deg,gln}$: Glutamine degradation rate [`k_deg_gln`]
@@ -193,8 +233,8 @@ $$\frac{dc_{HCP}}{dt} = hcp_{per\_cell} \cdot k_{lysis} \cdot x_{dead}$$
 - $q_{O_2}$, $k_{sat,O_2}$, $k_{lac,hyp}$, $\varepsilon_{crit}$: Specific oxygen uptake, oxygen saturation constant, rise of the lactate yield without oxygen, and critical local energy dissipation [`q_o2`, `k_sat_o2`, `k_lactate_hypoxia`, `eps_crit`]
 - $\theta_{crit}$: Mixing time at which gradients double the death rate [`t_mix_crit`]
 - $T$, $D$, $N_p$, $v_s$, $C$, $\alpha$, $\beta$, $\phi$, $c^*_{O_2}$: Reactor geometry and oxygen transfer [`tank_diameter`, `impeller_diameter`, `power_number`, `superficial_gas_velocity`, `kla_constant`, `kla_power_exponent`, `kla_gas_exponent`, `max_to_mean_dissipation`, `o2_saturation`]
-- $s_{scale}$: Reactor scale factor [`scale_factor`]
-- $g_{inhibition}$: Growth inhibition exponent [`growth_inhibition`]
+- $s_{scale}$: Residual death-rate factor of the reactor [`scale_factor`]
+- $g_{inhibition}$: Residual growth-rate factor of the reactor [`growth_inhibition`]
 - $T_{opt}$: Optimal temperature for growth [`e_activation`]
 - $r_{temp}$: Temperature robustness factor [`temperature_robustness_factor`]
 - $steepness_{temp,l}$, $steepness_{temp,r}$: Steepness factors for temperature effect on the left and right side of the optimal temperature [`steepness_factor_t_l`, `steepness_factor_t_r`]
@@ -212,6 +252,33 @@ $$\frac{dc_{HCP}}{dt} = hcp_{per\_cell} \cdot k_{lysis} \cdot x_{dead}$$
 - $T_{opt,P}$, $r_{temp,P}$, steepness/smoothness: temperature parameters for product formation [`t_opt_product`, `temperature_robustness_factor_product`, `steepness_factor_t_l_product`, `steepness_factor_t_r_product`, `smoothness_factor_t_l_product`, `smoothness_factor_t_r_product`]
 - $q_{lac,uptake}$, $k_{switch}$, $k_{sat,lac,up}$: Maximum lactate consumption, the glucose below which it switches on, and its saturation constant [`q_lac_uptake`, `k_glc_lac_switch`, `k_sat_lac_uptake`]
 - $pH_{opt,P}$, $r_{pH,P}$, steepness/smoothness: pH parameters for product formation [`ph_opt_product`, `ph_robustness_factor_product`, `steepness_factor_ph_l_product`, `steepness_factor_ph_r_product`, `smoothness_factor_ph_l_product`, `smoothness_factor_ph_r_product`]
+
+### Continuous Operation (Perfusion)
+A recipe with `perfusion` settings runs continuously: fresh medium is fed, cell-free harvest leaves through a cell-retention device and a bleed removes culture at reactor concentration; the volume stays constant (harvest = feed - bleed). Every species follows the reactor balance of Richelle et al. (2022):
+
+$$\frac{dc}{dt} = r(c) + D_{feed}\,c_{medium} - D_{bleed}\,c - D_{harvest}\,\sigma\,c, \qquad D = F/V$$
+
+where $\sigma$ is the passage coefficient of the `RetentionDevice` (`cell_retention` for viable and dead cells, `product_passage` for the product and its aggregated and glycated forms, `hcp_passage`; lysed cells, biomaterial, metabolites and gases pass freely). The product collected in the harvest is reported as `harvested_product` [mmol], the flows as `feed_rate`, `bleed_rate` and `harvest_rate` [L/day] and the working volume as `volume` [L].
+
+The cell model includes the lysed cells $x_{lysed}$ and the inhibitory biomaterial $\varnothing_b$ of Richelle et al. (2022):
+
+$$\frac{dx_{lysed}}{dt} = k_{lysis}\,x_{dead}, \qquad \frac{d\varnothing_b}{dt} = \frac{x_{viable}}{10^6 \cdot 24}, \qquad \mu \leftarrow \frac{\mu}{1 + (\varnothing_b / K_{I,b})^3}, \qquad k_{death} \leftarrow k_{death} + k_{t}\,x_{lysed}$$
+
+[`kt_lysed`, `k_i_biomaterial`]. The biomaterial accumulates in fed-batch and is washed out in perfusion. `presets.richelle_2022_celltype()` reproduces the paper's model (Table 1) with all other mechanisms switched off; the tests verify it against the paper's equations.
+
+**Control.** `PerfusionSettings.controller` sets the feed and bleed rates every `control_interval` from what the analytics measure (`control.py`: `ConstantRates`, `ScheduleController`, `CsprController`, `PIBleedController`). For your own control, step a run yourself:
+
+```python
+session = simulator.start(recipe, seed=1)
+while not session.done:
+    measurement = session.measure()          # noisy, like real analytics
+    session.step(ControlAction(feed_rate=0.4, bleed_rate=0.05), hours=1.0)
+result = session.result()                    # true and measured trajectories
+```
+
+See `setup_and_tutorial/perfusion_tutorial.ipynb`.
+
+*A. Richelle et al., "Model-based intensification of CHO cell cultures: One-step strategy from fed-batch to perfusion," Front. Bioeng. Biotechnol. 10:948905, 2022.*
 
 ### Noise in Simulations
 Noise enters where it arises physically. Everything defaults to zero: `NoiseParameters()` is the noiseless, deterministic model, and `NoiseParameters.typical()` gives levels typical of CHO fed-batch processes. Every level can be set individually (fractions, 0.05 = 5 %).

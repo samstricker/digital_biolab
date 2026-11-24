@@ -78,6 +78,41 @@
 
   /* ---------- schematic ---------- */
   #schematic svg { width: 100%; height: auto; display: block; }
+  .icon-btn {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 4px;
+    padding: 2px 9px; font: 600 11px var(--sans); letter-spacing: .04em; cursor: pointer; text-transform: none;
+  }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ---------- unit detail view ---------- */
+  .detail {
+    position: fixed; left: 0; right: 0; bottom: 0; top: var(--detail-top, 112px); z-index: 20;
+    background: var(--bg); padding: 10px; display: grid; gap: 10px;
+    grid-template-columns: 320px 1fr 320px; grid-template-rows: 1fr auto;
+  }
+  .detail.hidden { display: none; }
+  .detail .stack { display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 0; }
+  .detail .center { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; display: flex; align-items: center; justify-content: center; min-height: 0; }
+  .detail .center svg { width: 100%; height: 100%; max-height: calc(100vh - 330px); }
+  .detail .center .title { position: absolute; top: 8px; left: 12px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .09em; }
+  .detail .center .close { position: absolute; top: 8px; right: 10px; }
+  .faceplate { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--ok); border-radius: 5px; padding: 6px 10px; }
+  .faceplate.warn { border-left-color: var(--warn); }
+  .faceplate.alarm { border-left-color: var(--alarm); background: #2a1e22; }
+  .faceplate .head { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); letter-spacing: .07em; text-transform: uppercase; }
+  .faceplate .head b { color: var(--accent); font-family: var(--mono); letter-spacing: 0; }
+  .faceplate .row { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2px; }
+  .faceplate .pv { font: 700 22px var(--mono); color: var(--pv); }
+  .faceplate .pv small { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 3px; }
+  .faceplate .mode { font: 700 10px var(--mono); padding: 2px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--ok); }
+  .faceplate .grid { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 1px 8px; font-size: 11px; margin-top: 3px; }
+  .faceplate .grid span:nth-child(odd) { color: var(--muted); }
+  .faceplate .grid span:nth-child(even) { font-family: var(--mono); color: var(--text); }
+  .faceplate svg { width: 100%; height: 28px; display: block; margin-top: 4px; }
+  .detail .bottom { grid-column: 1 / -1; display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+  .analytics table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .analytics th { text-align: left; font-weight: 600; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+  .analytics td { padding: 6px 8px; font-family: var(--mono); font-size: 14px; }
   .tagbox rect { fill: #0e1318; stroke: var(--line); }
   .tagbox .name { fill: var(--muted); font: 600 9px var(--sans); letter-spacing: .06em; }
   .tagbox .value { fill: var(--pv); font: 700 13px var(--mono); }
@@ -165,7 +200,8 @@
 <main>
   <div class="col">
     <section class="panel" id="schematic">
-      <h2>Vessel <span id="vesselName">–</span></h2>
+      <h2>Vessel <span><span id="vesselName">–</span> <button class="icon-btn" id="zoomBtn" title="Open the unit detail view">⤢ Detail</button></span></h2>
+      <div id="schematicHost">
       <svg viewBox="-40 0 380 330" aria-label="Bioreactor schematic">
         <defs>
           <linearGradient id="liquid" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#d0a24a"/><stop offset="1" stop-color="#8f6a26"/></linearGradient>
@@ -182,14 +218,15 @@
         <text x="40" y="22" fill="#8492a3" font-size="9">EXHAUST</text>
         <text x="-30" y="318" fill="#8492a3" font-size="9" id="gasLabel">GAS IN</text>
         <!-- tag boxes -->
-        <g class="tagbox" id="tb-temp" transform="translate(-34,92)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">TIC-101</text><text class="value" x="6" y="29" id="tv-temp">–</text><text class="unit" x="60" y="29">°C</text></g>
-        <g class="tagbox" id="tb-ph" transform="translate(-34,140)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">pHIC-102</text><text class="value" x="6" y="29" id="tv-ph">–</text></g>
-        <g class="tagbox" id="tb-do" transform="translate(262,92)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">DOIC-103</text><text class="value" x="6" y="29" id="tv-do">–</text><text class="unit" x="58" y="29">%</text></g>
-        <g class="tagbox" id="tb-co2" transform="translate(262,140)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">AI-104 pCO2</text><text class="value" x="6" y="29" id="tv-co2">–</text><text class="unit" x="46" y="29">mmHg</text></g>
-        <g class="tagbox" id="tb-rpm" transform="translate(262,236)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">SIC-105 AGIT</text><text class="value" x="6" y="29" id="tv-rpm">–</text><text class="unit" x="54" y="29">rpm</text></g>
-        <g class="tagbox" id="tb-gas" transform="translate(-34,236)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">FIC-106 O2</text><text class="value" x="6" y="29" id="tv-gas">–</text><text class="unit" x="58" y="29">%</text></g>
-        <g class="tagbox" id="tb-vol" transform="translate(262,188)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">WI-107 VOL</text><text class="value" x="6" y="29" id="tv-vol">–</text><text class="unit" x="58" y="29" id="tu-vol">L</text></g>
+        <g class="tagbox" id="tb-temp" transform="translate(-34,92)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">TIC-101</text><text class="value" x="6" y="30" id="tv-temp">–</text><text class="unit" x="68" y="30" text-anchor="end">°C</text></g>
+        <g class="tagbox" id="tb-ph" transform="translate(-34,140)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">pHIC-102</text><text class="value" x="6" y="30" id="tv-ph">–</text><text class="unit" x="68" y="30" text-anchor="end">pH</text></g>
+        <g class="tagbox" id="tb-do" transform="translate(262,92)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">DOIC-103</text><text class="value" x="6" y="30" id="tv-do">–</text><text class="unit" x="68" y="30" text-anchor="end">%</text></g>
+        <g class="tagbox" id="tb-co2" transform="translate(262,140)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">AI-104</text><text class="value" x="6" y="30" id="tv-co2">–</text><text class="unit" x="68" y="30" text-anchor="end">mmHg</text></g>
+        <g class="tagbox" id="tb-rpm" transform="translate(262,236)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">SIC-105</text><text class="value" x="6" y="30" id="tv-rpm">–</text><text class="unit" x="68" y="30" text-anchor="end">rpm</text></g>
+        <g class="tagbox" id="tb-gas" transform="translate(-34,236)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">FIC-106</text><text class="value" x="6" y="30" id="tv-gas">–</text><text class="unit" x="68" y="30" text-anchor="end">% O2</text></g>
+        <g class="tagbox" id="tb-vol" transform="translate(262,188)"><rect width="74" height="38" rx="3"/><text class="name" x="6" y="12">WI-107</text><text class="value" x="6" y="30" id="tv-vol">–</text><text class="unit" x="68" y="30" text-anchor="end" id="tu-vol">L</text></g>
       </svg>
+      </div>
     </section>
     <section class="panel">
       <h2>Unit information</h2>
@@ -213,6 +250,7 @@
         <div class="trend" id="trendGas"></div>
         <div class="trend" id="trendCells"></div>
         <div class="trend" id="trendMet"></div>
+        <div class="trend" id="trendFlow" style="display:none"></div>
       </div>
     </section>
   </div>
@@ -232,6 +270,20 @@
     </section>
   </div>
 </main>
+
+<div class="detail hidden" id="detail">
+  <div class="stack" id="detailLeft"></div>
+  <div class="center">
+    <div class="title" id="detailTitle">Unit detail</div>
+    <button class="icon-btn close" id="closeBtn" title="Back to the overview (Esc)">✕ Close</button>
+    <div id="detailVessel" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center"></div>
+  </div>
+  <div class="stack" id="detailRight"></div>
+  <div class="bottom">
+    <section class="panel analytics"><h2>Offline analytics <span id="sampleTime">–</span></h2><div id="analytics"></div></section>
+    <section class="panel"><h2>Unit alarms <span id="detailAlarmCount">–</span></h2><div class="log" id="detailAlarms" style="min-height:0;max-height:120px"></div></section>
+  </div>
+</div>
 
 <script>
 const RUNS = __RUN_DATA__;
@@ -255,9 +307,14 @@ function lastOffline(key, t) {
   run.offline.t.forEach((ts, i) => { if (ts <= t && run.offline[key][i] !== null) { v = run.offline[key][i]; at = ts; } });
   return { v, at };
 }
+const isPerfusion = () => run.unit.mode === "perfusion";
 function phaseAt(t) {
   const feeds = run.events.filter((e) => e.kind === "feed" && e.t <= t);
   if (t >= run.runtime) return "HARVEST";
+  if (isPerfusion()) {
+    if (run.pv.bleed_vvd[tIndex] > 0) return "PERFUSION · STEADY STATE";
+    return run.pv.feed_vvd[tIndex] > 0 ? "PERFUSION · GROWTH" : "BATCH";
+  }
   if (feeds.length === 0) return "BATCH";
   const tempSp = run.sp.temp[tIndex], firstSp = run.sp.temp[0];
   return tempSp < firstSp - 1.5 ? `PRODUCTION · FED ${feeds.length}` : `GROWTH · FED ${feeds.length}`;
@@ -278,15 +335,23 @@ const TILES = [
   { key: "rpm", name: "Agitation", tag: "AGIT", unit: "rpm", d: 0, pv: () => run.pv.rpm[tIndex], sp: () => run.sp.rpm[tIndex], range: [0, Math.max(...run.sp.rpm) * 1.3] },
   { key: "gas", name: "Gas O2", tag: "GASO2", unit: "%", d: 0, mode: () => (run.sp.do === null ? "MAN" : "CASC"), note: () => (run.sp.do === null ? "air only" : "output of DO loop"), pv: () => run.pv.gas_o2[tIndex], sp: () => null, range: [0, 100] },
   { key: "pco2", name: "pCO2", tag: "pCO2", unit: "mmHg", d: 0, mode: () => "MON", note: () => "alarm > 80 mmHg", pv: () => run.pv.pco2[tIndex], sp: () => null, range: [0, 150] },
-  { key: "vcd", name: "Viable cells", tag: "VCD", unit: "e6/mL", d: 2, offline: "vcd", range: [0, 20] },
+  { key: "vcd", name: "Viable cells", tag: "VCD", unit: "e6/mL", d: 2, offline: "vcd", range: [0, 20], note: () => (run.sp.vcd ? `SP ${run.sp.vcd.toFixed(0)} e6/mL` : null) },
   { key: "via", name: "Viability", tag: "VIA", unit: "%", d: 1, offline: "via", range: [0, 100] },
   { key: "glc", name: "Glucose", tag: "GLC", unit: "mM", d: 1, offline: "glc", range: [0, 30] },
   { key: "lac", name: "Lactate", tag: "LAC", unit: "mM", d: 1, offline: "lac", range: [0, 50] },
   { key: "nh4", name: "Ammonia", tag: "NH4", unit: "mM", d: 2, offline: "nh4", range: [0, 10] },
   { key: "titer", name: "Titer", tag: "TITER", unit: "g/L", d: 2, offline: "titer", range: [0, 10] },
 ];
+// Extra tiles for continuous operation
+const PERFUSION_TILES = [
+  { key: "feed", name: "Perfusion", tag: "FEED", unit: "vvd", d: 2, mode: () => (run.unit.controller === "CsprController" ? "CSPR" : "AUTO"), note: () => `${(run.pv.feed_vvd[tIndex] * run.pv.volume[tIndex]).toFixed(2)} L/d medium`, pv: () => run.pv.feed_vvd[tIndex], sp: () => null, range: [0, 4] },
+  { key: "bleed", name: "Bleed", tag: "BLEED", unit: "vvd", d: 2, mode: () => (run.sp.vcd ? "PI·VCD" : "MAN"), note: () => (run.sp.vcd ? `holds VCD at ${run.sp.vcd.toFixed(0)} e6/mL` : "no bleed"), pv: () => run.pv.bleed_vvd[tIndex], sp: () => null, range: [0, 1] },
+  { key: "harvest", name: "Harvest", tag: "HARV", unit: "vvd", d: 2, mode: () => "TFF", note: () => `titer ${run.bio.harvest_titer[tIndex].toFixed(2)} g/L`, pv: () => run.pv.harvest_vvd[tIndex], sp: () => null, range: [0, 4] },
+];
+let activeTiles = TILES;
 function buildTiles() {
-  $("tiles").innerHTML = TILES.map((t) => `
+  activeTiles = isPerfusion() ? [...TILES, ...PERFUSION_TILES] : TILES;
+  $("tiles").innerHTML = activeTiles.map((t) => `
     <div class="tile" id="tile-${t.key}">
       <div class="name"><span>${t.name}</span><span id="tt-${t.key}"></span></div>
       <div class="pv" id="tpv-${t.key}">–</div>
@@ -295,7 +360,7 @@ function buildTiles() {
     </div>`).join("");
 }
 function updateTiles(t) {
-  for (const tile of TILES) {
+  for (const tile of activeTiles) {
     let value, sub;
     if (tile.offline) {
       const s = lastOffline(tile.offline, t);
@@ -388,8 +453,7 @@ function renderVessel(type) {
       <rect x="106" y="92" width="88" height="14" rx="3" fill="#7f8d9b"/>
       <rect x="140" y="64" width="20" height="14" rx="2" fill="#5d6977"/><text x="164" y="74" fill="#8492a3" font-size="7">DRIVE</text>
       ${shaft}${impellerArt}
-      <circle cx="117" cy="226" r="3.5" fill="#f2b33d" opacity=".9"/><circle cx="117" cy="240" r="3.5" fill="#39c27a" opacity=".9"/>
-      <text x="76" y="229" fill="#8492a3" font-size="7">pH spot</text><text x="76" y="243" fill="#8492a3" font-size="7">DO spot</text>`;
+      <circle cx="117" cy="226" r="3.5" fill="#f2b33d" opacity=".9"/><circle cx="117" cy="240" r="3.5" fill="#39c27a" opacity=".9"/>`;
   } else if (type === "glass") {
     art = `
       ${pipes}
@@ -399,10 +463,7 @@ function renderVessel(type) {
       <rect x="64" y="64" width="172" height="10" rx="3" fill="#6b7886"/>
       <rect x="138" y="30" width="24" height="14" rx="2" fill="#6b7886"/>
       ${shaft}${impellerArt}
-      <rect x="${sparger.x0 - 4}" y="${sparger.y}" width="${sparger.x1 - sparger.x0 + 8}" height="6" rx="3" fill="#6b7886"/>
-      <line x1="190" y1="70" x2="190" y2="190" stroke="#c9d3dc" stroke-width="2"/>
-      <line x1="205" y1="70" x2="205" y2="175" stroke="#c9d3dc" stroke-width="2"/>
-      <line x1="95" y1="70" x2="95" y2="180" stroke="#c9d3dc" stroke-width="2"/>`;
+      <rect x="${sparger.x0 - 4}" y="${sparger.y}" width="${sparger.x1 - sparger.x0 + 8}" height="6" rx="3" fill="#6b7886"/>`;
   } else {
     art = `
       <line x1="80" y1="288" x2="70" y2="322" stroke="#5d6977" stroke-width="5"/>
@@ -418,14 +479,85 @@ function renderVessel(type) {
       <rect x="132" y="34" width="36" height="22" rx="3" fill="#6b7886"/><rect x="138" y="10" width="24" height="24" rx="3" fill="#5d6977"/>
       <text x="170" y="26" fill="#8492a3" font-size="7">GEARBOX</text>
       ${shaft}${impellerArt}
-      <ellipse cx="150" cy="${sparger.y + 2}" rx="${(sparger.x1 - sparger.x0) / 2}" ry="4" fill="none" stroke="#8794a1" stroke-width="3"/>
-      <line x1="66" y1="150" x2="96" y2="165" stroke="#c9d3dc" stroke-width="3"/>
-      <line x1="66" y1="200" x2="96" y2="212" stroke="#c9d3dc" stroke-width="3"/>
-      <line x1="234" y1="150" x2="206" y2="165" stroke="#c9d3dc" stroke-width="3"/>`;
+      <ellipse cx="150" cy="${sparger.y + 2}" rx="${(sparger.x1 - sparger.x0) / 2}" ry="4" fill="none" stroke="#8794a1" stroke-width="3"/>`;
   }
+  if (isPerfusion()) art += perfusionArt();
   $("vesselArt").innerHTML = art;
   $("clipShape").setAttribute("d", G.clip);
   buildAnimationLayers();
+}
+
+// Perfusion: culture circulates through a TFF module (retentate loop back into
+// the vessel); cell-free permeate leaves as harvest; the bleed branches off
+// the retentate loop and carries cells.
+const FLOW_DOTS = { loop: 16, harvest: 8, bleed: 6 };
+function flowPaths() {
+  const bottom = G.inner.y + G.inner.h;
+  return {
+    loop: [[205, bottom - 4], [205, 298], [272, 298], [272, 314], [125, 314], [125, bottom - 4]],
+    harvest: [[247, 291], [247, 283], [336, 283]],
+    bleed: [[236, 314], [236, 326], [336, 326]],
+  };
+}
+function perfusionArt() {
+  const p = flowPaths();
+  const poly = (pts) => "M" + pts.map((q) => q.join(" ")).join(" L");
+  const fibers = [0, 1, 2, 3, 4, 5].map((k) => `<line x1="${229 + 7 * k}" y1="292.5" x2="${229 + 7 * k}" y2="303.5" stroke="#9fd0e8" stroke-width="1"/>`).join("");
+  return `
+    <path class="pipe" id="loopPipe" d="${poly(p.loop)}" style="stroke-width:3.5"/>
+    <path class="pipe" id="harvestPipe" d="${poly(p.harvest)}" />
+    <path class="pipe" id="bleedPipe" d="${poly(p.bleed)}" />
+    <g id="loopDots"></g>
+    <circle cx="205" cy="289" r="5.5" fill="#0e1318" stroke="#8794a1" stroke-width="1.5"/>
+    <path d="M202 286 L209 289 L202 292 Z" fill="#8794a1" id="loopPumpArrow"/>
+    <rect x="222" y="291" width="44" height="14" rx="4" fill="#0e1318" stroke="#8794a1" stroke-width="1.5"/>${fibers}
+    <text x="131" y="327" fill="#8492a3" font-size="7">RETENTATE LOOP</text><text x="226" y="288" fill="#8492a3" font-size="6.5">TFF</text>
+    <text x="276" y="292" fill="#8492a3" font-size="7">HARVEST</text>
+    <text x="306" y="320" fill="#8492a3" font-size="7">BLEED</text>
+    <g id="harvestDots"></g><g id="bleedDots"></g>`;
+}
+function pointOnPath(pts, f) {
+  const lengths = pts.slice(1).map((q, i) => Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1]));
+  let d = f * lengths.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < lengths.length; i++) {
+    if (d <= lengths[i]) {
+      const r = d / lengths[i];
+      return [pts[i][0] + r * (pts[i + 1][0] - pts[i][0]), pts[i][1] + r * (pts[i + 1][1] - pts[i][1])];
+    }
+    d -= lengths[i];
+  }
+  return pts[pts.length - 1];
+}
+let flowPhase = { loop: 0, harvest: 0, bleed: 0 };
+const FLOW_COLORS = { loop: "#d0a24a", harvest: "#39c27a", bleed: "#f0524f" };
+const PIPE_ACTIVE = { loop: "#8f6a26", harvest: "#2f8f5c", bleed: "#a8403e" };
+function animateFlows(dt) {
+  const p = flowPaths();
+  const running = !harvested();
+  // The recirculation pump runs whenever the TFF is in operation (harvest on)
+  const rates = {
+    loop: running && run.pv.harvest_vvd[tIndex] > 0 ? 1 : 0,
+    harvest: running ? run.pv.harvest_vvd[tIndex] : 0,
+    bleed: running ? run.pv.bleed_vvd[tIndex] : 0,
+  };
+  const speed = { loop: 0.35, harvest: Math.min(0.6, 0.12 * rates.harvest), bleed: Math.min(0.6, 0.4 * rates.bleed) };
+  for (const kind of ["loop", "harvest", "bleed"]) {
+    const g = $(`${kind}Dots`);
+    if (!g) return;
+    if (g.childNodes.length !== FLOW_DOTS[kind]) {
+      g.innerHTML = Array.from({ length: FLOW_DOTS[kind] }, () => `<circle r="${kind === "loop" ? 2.2 : 2}" fill="${FLOW_COLORS[kind]}"/>`).join("");
+    }
+    const on = rates[kind] > 0;
+    $(`${kind}Pipe`).style.stroke = on ? PIPE_ACTIVE[kind] : "";
+    flowPhase[kind] = (flowPhase[kind] + dt * speed[kind]) % 1;
+    g.childNodes.forEach((c, i) => {
+      const [x, y] = pointOnPath(p[kind], (flowPhase[kind] + i / FLOW_DOTS[kind]) % 1);
+      c.setAttribute("cx", x.toFixed(1)); c.setAttribute("cy", y.toFixed(1));
+      c.style.opacity = on ? 0.95 : 0;
+    });
+  }
+  const arrow = $("loopPumpArrow");
+  if (arrow) arrow.setAttribute("fill", rates.loop > 0 ? "#d0a24a" : "#8794a1");
 }
 
 function liquidTop() { return parseFloat($("liquidRect").getAttribute("y")); }
@@ -440,6 +572,7 @@ function activeBubbles() {
 // whenever playback passes a feed.
 function feeding(now) {
   const t = run.time[tIndex];
+  if (isPerfusion() && !harvested()) return run.pv.feed_vvd[tIndex] > 0;
   return now < feedAnimUntil || run.events.some((e) => e.kind === "feed" && t >= e.t && t < e.t + 2);
 }
 
@@ -502,6 +635,7 @@ function animate(now) {
     d.setAttribute("cy", d.y.toFixed(1));
     d.style.opacity = d.y > inlet ? 0.9 : 0;
   });
+  if (isPerfusion()) animateFlows(dt);
   const ripple = $("ripple");
   if (isFeeding) {
     const r = (now / 8) % 22;
@@ -616,7 +750,8 @@ function drawTrends() {
   const t = run.time[tIndex];
   const cfg = { displayModeBar: false, responsive: true };
   const L = (y1, y2, bottom = false) => {
-    const layout = Object.assign(baseLayout(), { yaxis: y1, yaxis2: y2 && Object.assign({ overlaying: "y", side: "right" }, y2), shapes: shapes(t) });
+    const layout = Object.assign(baseLayout(), { yaxis: y1, shapes: shapes(t) });
+    if (y2) layout.yaxis2 = Object.assign({ overlaying: "y", side: "right" }, y2);
     layout.xaxis.showticklabels = bottom;
     layout.margin.b = bottom ? 22 : 6;
     return layout;
@@ -633,11 +768,12 @@ function drawTrends() {
     line(upTo(run.pv.gas_o2), "Gas O2 %", "#a7e3a0", { line: { color: "#a7e3a0", width: 1 } }),
     line(upTo(run.pv.pco2), "pCO2 mmHg", "#e0c35a"),
     line(upTo(run.pv.rpm), "Agitation rpm", "#c9d3dc", { yaxis: "y2", line: { color: "#c9d3dc", width: 1.2 } }),
-  ], L(yAxis("% · mmHg", { range: [0, 130] }), yAxis("rpm", { rangemode: "tozero" })), cfg);
+  ], L(yAxis("% · mmHg", { range: [0, Math.max(130, 1.1 * Math.max(...run.pv.pco2))] }), yAxis("rpm", { rangemode: "tozero" })), cfg);
 
   Plotly.react("trendCells", [
     line(upTo(run.bio.vcd), "VCD model", "#3fb6e8", { line: { color: "rgba(63,182,232,.45)", width: 1.2 } }),
     dots("vcd", "VCD 1e6/mL", "#3fb6e8", t),
+    ...(run.sp.vcd ? [sp(run.time.map(() => run.sp.vcd), "VCD SP", "#3fb6e8")] : []),
     line(upTo(run.bio.via), "Viability model", "#f2b33d", { yaxis: "y2", line: { color: "rgba(242,179,61,.45)", width: 1.2 } }),
     dots("via", "Viability %", "#f2b33d", t, { yaxis: "y2" }),
   ], L(yAxis("1e6 cells/mL", { rangemode: "tozero" }), yAxis("%", { range: [0, 105] })), cfg);
@@ -647,14 +783,28 @@ function drawTrends() {
     dots("lac", "Lactate", "#e05ad3", t), line(upTo(run.bio.lac), "", "rgba(224,90,211,.4)", { showlegend: false, line: { color: "rgba(224,90,211,.4)", width: 1 } }),
     dots("gln", "Glutamine", "#7ad3ff", t, { yaxis: "y2" }), line(upTo(run.bio.gln), "", "rgba(122,211,255,.4)", { yaxis: "y2", showlegend: false, line: { color: "rgba(122,211,255,.4)", width: 1 } }),
     dots("nh4", "Ammonia", "#a7e3a0", t, { yaxis: "y2" }), line(upTo(run.bio.nh4), "", "rgba(167,227,160,.4)", { yaxis: "y2", showlegend: false, line: { color: "rgba(167,227,160,.4)", width: 1 } }),
-  ], L(yAxis("glc · lac mM", { rangemode: "tozero" }), yAxis("gln · NH4 mM", { rangemode: "tozero" }), true), cfg);
+  ], L(yAxis("glc · lac mM", { rangemode: "tozero" }), yAxis("gln · NH4 mM", { rangemode: "tozero" }), !isPerfusion()), cfg);
+
+  if (isPerfusion()) {
+    Plotly.react("trendFlow", [
+      line(upTo(run.pv.feed_vvd), "Perfusion vvd", "#b48cf2"),
+      line(upTo(run.pv.harvest_vvd), "Harvest vvd", "#39c27a", { line: { color: "#39c27a", width: 1.2 } }),
+      line(upTo(run.pv.bleed_vvd), "Bleed vvd", "#f0524f"),
+    ], L(yAxis("vvd", { rangemode: "tozero" }), null, true), cfg);
+  }
 
   const titerLayout = Object.assign(baseLayout(), { yaxis: yAxis("g/L", { rangemode: "tozero" }), shapes: shapes(t), margin: { l: 44, r: 12, t: 16, b: 26 }, showlegend: false });
   titerLayout.xaxis.dtick = 2;
-  Plotly.react("trendTiter", [
+  const titerTraces = [
     line(upTo(run.bio.titer), "Titer model", "#b48cf2", { line: { color: "rgba(180,140,242,.5)", width: 1.2 } }),
     dots("titer", "Titer g/L", "#b48cf2", t),
-  ], titerLayout, cfg);
+  ];
+  if (isPerfusion()) {
+    titerLayout.yaxis2 = Object.assign({ overlaying: "y", side: "right" }, yAxis("g collected", { rangemode: "tozero" }));
+    titerLayout.margin.r = 44;
+    titerTraces.push(line(upTo(run.bio.harvested_g), "Collected g", "#39c27a", { yaxis: "y2" }));
+  }
+  Plotly.react("trendTiter", titerTraces, titerLayout, cfg);
 }
 
 // ---------- KPIs ----------
@@ -681,8 +831,136 @@ function updateKpis(t) {
     ["Feeds given", `${feeds}/${run.events.filter((e) => e.kind === "feed").length}`, ""],
     ["Volume added", big ? ((v - v0) / 1000).toFixed(2) : ((v - v0) * 1000).toFixed(0), big ? "m³" : "mL"],
   ];
+  if (isPerfusion()) {
+    let medium = 0;
+    for (let i = 1; i <= tIndex; i++) {
+      medium += run.pv.feed_vvd[i - 1] * run.pv.volume[i - 1] * (run.time[i] - run.time[i - 1]) / 24;
+    }
+    const collected = run.bio.harvested_g[tIndex] + titer * v;
+    const qpPerf = ivcd > 0 ? (collected / v) * 1000 / ivcd : 0;
+    items[2] = ["Product collected", collected.toFixed(1), "g"];
+    items[3] = ["Specific productivity", qpPerf.toFixed(0), "pg/cell/d"];
+    items[6] = ["Medium used", medium.toFixed(1), "L"];
+    items[7] = ["Volumetric productivity", (t > 0 ? (collected / v) / (t / 24) : 0).toFixed(2), "g/L/d"];
+  }
   $("kpis").innerHTML = items.map(([n, val, u]) => `<div class="kpi"><div class="name">${n}</div><div class="v">${val}<small>${u}</small></div></div>`).join("");
 }
+
+// ---------- unit detail view ----------
+let detailOpen = false;
+const HISTORY = 48;  // h shown in the faceplate trends
+
+function spark(values, setpoint, lo, hi) {
+  // last HISTORY hours up to the cursor; setpoint dashed
+  const start = Math.max(0, tIndex - HISTORY);
+  const pts = values.slice(start, tIndex + 1);
+  if (pts.length < 2) return "<svg viewBox='0 0 200 38'></svg>";
+  const min = lo ?? Math.min(...pts, ...(setpoint ? setpoint.slice(start, tIndex + 1) : [])) * 0.98;
+  const max = hi ?? Math.max(...pts, ...(setpoint ? setpoint.slice(start, tIndex + 1) : [])) * 1.02 + 1e-9;
+  const xy = (v, i, n) => `${(200 * i) / (n - 1)},${(36 - (34 * (v - min)) / (max - min || 1)).toFixed(1)}`;
+  const line = pts.map((v, i) => xy(v, i, pts.length)).join(" ");
+  const spLine = setpoint ? setpoint.slice(start, tIndex + 1).map((v, i, a) => xy(v, i, a.length)).join(" ") : "";
+  return `<svg viewBox="0 0 200 38" preserveAspectRatio="none">
+    <rect width="200" height="38" fill="#0e1318"/>
+    ${spLine ? `<polyline points="${spLine}" fill="none" stroke="#8a99aa" stroke-dasharray="4 3" stroke-width="1"/>` : ""}
+    <polyline points="${line}" fill="none" stroke="#3fb6e8" stroke-width="1.5"/></svg>`;
+}
+
+function faceplate(fp, t) {
+  const state = alarmFor(fp.alarm || fp.tagName, t);
+  const pv = fp.pv(), sp = fp.sp ? fp.sp() : null;
+  const dev = sp === null || sp === undefined ? null : pv - sp;
+  const cells = [
+    ["SP", sp === null || sp === undefined ? "–" : `${sp.toFixed(fp.d)} ${fp.unit}`],
+    ["DEV", dev === null ? "–" : `${dev >= 0 ? "+" : ""}${dev.toFixed(fp.d)}`],
+    [fp.outLabel || "OUT", fp.out ? fp.out() : "–"],
+    ["", ""],
+  ];
+  return `<div class="faceplate ${state}">
+    <div class="head"><b>${fp.tag}</b><span>${fp.name}</span></div>
+    <div class="row"><div class="pv">${pv === null ? "–" : pv.toFixed(fp.d)}<small>${fp.unit}</small></div><span class="mode">${fp.mode()}</span></div>
+    <div class="grid">${cells.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join("")}</div>
+    ${spark(fp.series(), fp.spSeries ? fp.spSeries() : null, fp.lo, fp.hi)}
+  </div>`;
+}
+
+function faceplates() {
+  const left = [
+    { tag: "TIC-101", name: "Temperature", tagName: "TEMP", unit: "°C", d: 2, mode: () => "AUTO",
+      pv: () => run.pv.temp[tIndex], sp: () => run.sp.temp[tIndex], outLabel: "OUT", out: () => "jacket",
+      series: () => run.pv.temp, spSeries: () => run.sp.temp },
+    { tag: "pHIC-102", name: "pH", tagName: "PH", unit: "", d: 2, mode: () => "AUTO",
+      pv: () => run.pv.ph[tIndex], sp: () => run.sp.ph[tIndex], outLabel: "OUT", out: () => "CO2 / base",
+      series: () => run.pv.ph, spSeries: () => run.sp.ph },
+    { tag: "DOIC-103", name: "Dissolved oxygen", tagName: "DO", unit: "%", d: 0,
+      mode: () => (run.sp.do === null ? "MAN" : "CASC"),
+      pv: () => run.pv.do[tIndex], sp: () => run.sp.do, outLabel: "O2 GAS", out: () => `${run.pv.gas_o2[tIndex].toFixed(0)} %`,
+      series: () => run.pv.do, spSeries: () => (run.sp.do === null ? null : run.time.map(() => run.sp.do)), lo: 0, hi: 110 },
+  ];
+  const right = [
+    { tag: "SIC-105", name: "Agitation", tagName: "AGIT", unit: "rpm", d: 0, mode: () => "AUTO",
+      pv: () => (harvested() ? 0 : run.pv.rpm[tIndex]), sp: () => run.sp.rpm[tIndex], outLabel: "MIX", out: () => `${run.unit.mixing_time_s} s`,
+      series: () => run.pv.rpm, spSeries: () => run.sp.rpm },
+    { tag: "AI-104", name: "pCO2", tagName: "pCO2", unit: "mmHg", d: 0, mode: () => "MON",
+      pv: () => run.pv.pco2[tIndex], sp: null, outLabel: "ALARM", out: () => "> 80 / 120",
+      series: () => run.pv.pco2, lo: 0 },
+    { tag: "WI-107", name: "Working volume", tagName: "VOL", unit: run.unit.volume_L >= 50 ? "L" : "L", d: run.unit.volume_L >= 50 ? 0 : 3, mode: () => "MON",
+      pv: () => run.pv.volume[tIndex], sp: null, outLabel: "GAS", out: () => `${run.unit.gas_vvm.toFixed(3)} vvm`,
+      series: () => run.pv.volume },
+  ];
+  if (isPerfusion()) {
+    right.push(
+      { tag: "FIC-108", name: "Perfusion", tagName: "FEED", unit: "vvd", d: 2,
+        mode: () => (run.unit.controller === "CsprController" ? "CSPR" : "AUTO"),
+        pv: () => run.pv.feed_vvd[tIndex], sp: null, outLabel: "MEDIUM", out: () => `${(run.pv.feed_vvd[tIndex] * run.pv.volume[tIndex]).toFixed(2)} L/d`,
+        series: () => run.pv.feed_vvd, lo: 0 },
+      { tag: "FIC-109", name: "Bleed (VCD control)", tagName: "BLEED", unit: "vvd", d: 2,
+        mode: () => (run.sp.vcd ? "PI" : "MAN"),
+        pv: () => run.pv.bleed_vvd[tIndex], sp: null, outLabel: "VCD SP", out: () => (run.sp.vcd ? `${run.sp.vcd.toFixed(0)} e6/mL` : "–"),
+        series: () => run.pv.bleed_vvd, lo: 0 },
+      { tag: "FI-110", name: "Harvest (TFF permeate)", tagName: "HARV", unit: "vvd", d: 2, mode: () => "MON",
+        pv: () => run.pv.harvest_vvd[tIndex], sp: null, outLabel: "TITER", out: () => `${run.bio.harvest_titer[tIndex].toFixed(2)} g/L`,
+        series: () => run.pv.harvest_vvd, lo: 0 },
+    );
+  }
+  return { left, right };
+}
+
+function updateDetail(t) {
+  const { left, right } = faceplates();
+  $("detailLeft").innerHTML = left.map((fp) => faceplate(fp, t)).join("");
+  $("detailRight").innerHTML = right.map((fp) => faceplate(fp, t)).join("");
+  $("detailTitle").textContent = `${run.unit.tag} · ${run.unit.name} · ${phaseAt(t)}`;
+  const s = lastOffline("vcd", t);
+  $("sampleTime").textContent = s.at === null ? "no sample yet" : `sample ${fmtT(s.at)}`;
+  const cols = [
+    ["VCD", "vcd", "e6/mL", 2], ["Viability", "via", "%", 1], ["Glucose", "glc", "mM", 1],
+    ["Glutamine", "gln", "mM", 2], ["Lactate", "lac", "mM", 1], ["Ammonia", "nh4", "mM", 2], ["Titer", "titer", "g/L", 2],
+  ];
+  $("analytics").innerHTML = `<table><tr>${cols.map((c) => `<th>${c[0]} <span style="text-transform:none">${c[2]}</span></th>`).join("")}</tr>
+    <tr>${cols.map((c) => { const v = lastOffline(c[1], t).v; return `<td>${v === null ? "–" : v.toFixed(c[3])}</td>`; }).join("")}</tr></table>`;
+  const active = activeAlarms(t);
+  $("detailAlarmCount").textContent = `${active.length} active`;
+  $("detailAlarms").innerHTML = active.length === 0 ? '<div class="empty">No active alarms</div>' :
+    `<table>${active.map((a) => `<tr class="${a.severity} active"><td class="t">${fmtT(a.start)}</td><td class="sev">${a.severity}</td><td>${a.message}</td></tr>`).join("")}</table>`;
+}
+
+function openDetail() {
+  detailOpen = true;
+  const bar = document.querySelector(".timebar");
+  document.documentElement.style.setProperty("--detail-top", `${bar.getBoundingClientRect().bottom}px`);
+  $("detailVessel").appendChild(document.querySelector("#schematicHost svg"));
+  $("detail").classList.remove("hidden");
+  updateDetail(run.time[tIndex]);
+}
+function closeDetail() {
+  detailOpen = false;
+  $("schematicHost").appendChild(document.querySelector("#detailVessel svg"));
+  $("detail").classList.add("hidden");
+}
+$("zoomBtn").addEventListener("click", openDetail);
+$("closeBtn").addEventListener("click", closeDetail);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && detailOpen) closeDetail(); });
 
 // ---------- state ----------
 function update() {
@@ -693,12 +971,16 @@ function update() {
   $("state").className = "state" + (done ? " done" : "");
   $("stateText").textContent = done ? "COMPLETE" : "RUNNING";
   updateTiles(t); updateSchematic(t); updateLogs(t); updateKpis(t); drawTrends();
+  if (detailOpen) updateDetail(t);
 }
 function selectRun(id) {
   run = RUNS.find((r) => r.id === id);
   $("unitTag").textContent = run.unit.tag;
   $("vesselName").textContent = run.unit.name;
   renderVessel(vesselType(run.unit.volume_L));
+  buildTiles();
+  $("trendFlow").style.display = isPerfusion() ? "" : "none";
+  document.querySelector(".trends").style.gridTemplateRows = `repeat(${isPerfusion() ? 5 : 4}, minmax(130px, 1fr))`;
   const vol = run.unit.volume_L >= 50 ? `${(run.unit.volume_L / 1000).toFixed(1)} m³` : run.unit.volume_L < 1 ? `${(run.unit.volume_L * 1000).toFixed(0)} mL` : `${run.unit.volume_L.toFixed(1)} L`;
   $("unitInfo").innerHTML = `
     <b>${run.label}</b><br>${run.description}<br><br>
@@ -735,6 +1017,7 @@ const params = new URLSearchParams(location.search);
 const startRun = RUNS.some((r) => r.id === params.get("run")) ? params.get("run") : RUNS[0].id;
 $("runSelect").value = startRun;
 selectRun(startRun);
+if (params.get("view") === "detail") setTimeout(openDetail, 0);
 if (params.has("t")) {
   const target = Number(params.get("t"));
   tIndex = run.time.reduce((best, h, i) => (Math.abs(h - target) < Math.abs(run.time[best] - target) ? i : best), 0);

@@ -23,9 +23,18 @@ from dbiolab.mammalian_cellculture_simulation import (
     sample_reactor,
     stirring_range,
 )
+from dbiolab.mammalian_cellculture_simulation.control import (
+    CsprController,
+    PIBleedController,
+)
+from dbiolab.mammalian_cellculture_simulation.data_models import (
+    PerfusionSettings,
+    RetentionDevice,
+)
 from dbiolab.mammalian_cellculture_simulation.data_models.reactor import (
     CO2_SOLUBILITY,
 )
+from dbiolab.mammalian_cellculture_simulation.presets import bench_perfusion_reactor
 from dbiolab.mammalian_cellculture_simulation.scale_library import BASE_CELLTYPE
 
 ANTIBODY_MOLAR_MASS = 150.0  # g/mmol, i.e. 1 mM = 150 g/L
@@ -76,33 +85,34 @@ def _feed(time_point, c_glc, c_gln, temperature, ph_value, stirring_rate):
 def best_recipe(reactor: ReactorType, noise: NoiseParameters) -> MammalianRecipe:
     """The best recipe found for the 2 L benchmark; stirring per reactor scale."""
     if reactor is BENCH_2L:
-        stirring = (279.78, 314.64, 349.25, 385.89)
+        stirring = (306.62, 323.5, 359.77, 379.66)
     else:  # scale-up at constant power per volume (30 W/m3)
         rpm = stirring_range(reactor, (30.0, 30.0))[0]
         stirring = (rpm,) * 4
     return MammalianRecipe(
         name="Best fed-batch recipe",
         celltype=CellType.from_dict(BASE_CELLTYPE),
-        temperature=36.13,
-        ph_value=6.89,
+        temperature=35.17,
+        ph_value=6.79,
         stirring_rate=stirring[0],
         initial_conditions=_concentrations(
             x_total=8e5,
             x_viable=8e5,
-            c_glc=5.02,
-            c_gln=1.27,
+            c_glc=5.0,
+            c_gln=0.88,
             c_o2=reactor.o2_saturation,
             c_co2=40.0 * CO2_SOLUBILITY,
         ),
         feeding_strategy=[
-            _feed(72.0, 1.89, 1.1, 35.68, 6.86, stirring[1]),
-            _feed(144.0, 12.39, 4.71, 34.4, 6.85, stirring[2]),
-            _feed(216.0, 20.0, 4.97, 33.11, 6.92, stirring[3]),
+            _feed(72.0, 0.79, 1.17, 35.28, 6.87, stirring[1]),
+            _feed(144.0, 10.38, 4.19, 34.37, 6.88, stirring[2]),
+            _feed(216.0, 19.0, 5.0, 33.14, 6.92, stirring[3]),
         ],
         runtime=336.0,
         measurement_intervals=TREND_INTERVAL,
         noise_parameters=noise,
         do_setpoint=0.4,
+        perfusion=None,
     )
 
 
@@ -129,6 +139,7 @@ def bad_recipe(reactor: ReactorType, noise: NoiseParameters) -> MammalianRecipe:
         measurement_intervals=TREND_INTERVAL,
         noise_parameters=noise,
         do_setpoint=None,
+        perfusion=None,
     )
 
 
@@ -149,6 +160,49 @@ class RunSpec:
     recipe: Callable[[ReactorType, NoiseParameters], MammalianRecipe]
     noise: NoiseParameters
     seed: int | None = None
+
+
+PERFUSION_RETENTION = RetentionDevice(
+    cell_retention=0.99, product_passage=0.95, hcp_passage=1.0
+)
+
+
+def perfusion_recipe(
+    controller,
+) -> Callable[[ReactorType, NoiseParameters], MammalianRecipe]:
+    """A 20-day perfusion run (as in the perfusion tutorial) with ``controller``."""
+
+    def make(reactor: ReactorType, noise: NoiseParameters) -> MammalianRecipe:
+        return MammalianRecipe(
+            name="Perfusion",
+            celltype=CellType.from_dict(BASE_CELLTYPE),
+            temperature=36.5,
+            ph_value=7.0,
+            stirring_rate=350.0,
+            initial_conditions=_concentrations(
+                x_total=0.8e6,
+                x_viable=0.8e6,
+                c_glc=30.0,
+                c_gln=4.0,
+                c_o2=reactor.o2_saturation,
+                c_co2=40.0 * CO2_SOLUBILITY,
+            ),
+            feeding_strategy=[],
+            runtime=480.0,
+            measurement_intervals=TREND_INTERVAL,
+            noise_parameters=noise,
+            do_setpoint=0.4,
+            perfusion=PerfusionSettings(
+                medium=_concentrations(
+                    c_glc=40.0, c_gln=6.0, c_o2=0.2, c_co2=40.0 * CO2_SOLUBILITY
+                ),
+                retention=PERFUSION_RETENTION,
+                controller=controller,
+                control_interval=2.0,
+            ),
+        )
+
+    return make
 
 
 def _scaled(scale: str, seed: int, name: str) -> Callable[[], ReactorType]:
@@ -219,6 +273,40 @@ RUNS: list[RunSpec] = [
         NoiseParameters.typical(),
         seed=5,
     ),
+    RunSpec(
+        "perfusion-pi",
+        "PB-301",
+        "Perfusion · PI bleed · 50e6 cells/mL",
+        "Continuous perfusion at 2.5 vvd; cells are retained by a TFF in a "
+        "recirculation loop; "
+        "a PI controller opens the bleed to hold 50e6 viable cells/mL.",
+        lambda: bench_perfusion_reactor(2.0),
+        perfusion_recipe(
+            PIBleedController(
+                vcd_setpoint=50e6,
+                feed_vvd=2.5,
+                kp=-0.3,
+                ti=24.0,
+                cspr=0.0,
+                filter_time=8.0,
+            )
+        ),
+        NoiseParameters.typical(),
+        seed=6,
+    ),
+    RunSpec(
+        "perfusion-cspr",
+        "PB-302",
+        "Perfusion · CSPR 40 pL/cell/day",
+        "Perfusion rate follows the viable cell density (max. 4 vvd), no bleed: "
+        "high cell density until oxygen and CO2 transfer limit it.",
+        lambda: bench_perfusion_reactor(2.0),
+        perfusion_recipe(
+            CsprController(cspr=40.0, min_vvd=0.3, max_vvd=4.0, bleed_vvd=0.0)
+        ),
+        NoiseParameters.typical(),
+        seed=7,
+    ),
 ]
 
 
@@ -263,19 +351,35 @@ def _step(times: np.ndarray, changes: list[tuple], initial: float) -> np.ndarray
     return values
 
 
+ALARM_DEBOUNCE = 3.0  # h, alarm periods closer than this are merged
+ALARM_MIN_DURATION = 1.0  # h, shorter blips are not raised
+
+
 def _alarm_list(time: np.ndarray, signals: dict[str, np.ndarray]) -> list[dict]:
+    """Alarm periods per limit, debounced like a control system would."""
     alarms = []
     for tag, condition, severity, message in ALARMS:
         active = np.asarray(condition(signals), dtype=bool)
         edges = np.flatnonzero(np.diff(np.concatenate(([0], active.astype(int), [0]))))
+        periods = []
         for start, end in zip(edges[::2], edges[1::2]):
+            t_start = float(time[start])
+            t_end = float(time[end]) if end < len(time) else None
+            previous_end = periods[-1][1] if periods else None
+            if previous_end is not None and t_start - previous_end < ALARM_DEBOUNCE:
+                periods[-1][1] = t_end
+            else:
+                periods.append([t_start, t_end])
+        for t_start, t_end in periods:
+            if t_end is not None and t_end - t_start < ALARM_MIN_DURATION:
+                continue
             alarms.append(
                 {
                     "tag": tag,
                     "severity": severity,
                     "message": message,
-                    "start": float(time[start]),
-                    "end": float(time[end]) if end < len(time) else None,
+                    "start": t_start,
+                    "end": t_end,
                 }
             )
     return sorted(alarms, key=lambda a: a["start"])
@@ -313,9 +417,11 @@ def export_run(spec: RunSpec) -> dict:
 
     do_pct = 100.0 * measured.c_o2 / reactor.o2_saturation
     pco2 = measured.c_co2 / CO2_SOLUBILITY
-    volume = np.full(len(time), reactor.volume)
-    for feed in feeds:
-        volume[time > feed.time_point] *= 1.0 + feed.volume_fraction
+    volume = true.volume
+    perfusion = recipe.perfusion
+    feed_vvd = true.feed_rate / volume
+    bleed_vvd = true.bleed_rate / volume
+    harvest_vvd = true.harvest_rate / volume
 
     viability = 100.0 * np.divide(
         true.x_viable, true.x_total, out=np.zeros_like(time), where=true.x_total > 0
@@ -372,7 +478,32 @@ def export_run(spec: RunSpec) -> dict:
                 {"t": feed.time_point, "kind": "setpoint", "text": "; ".join(changes)}
             )
         previous = tuple(n if n is not None else o for n, o in zip(current, previous))
+    if perfusion is not None:
+        started = np.flatnonzero(feed_vvd > 0)
+        if len(started):
+            t0 = float(time[started[0]])
+            events.append(
+                {
+                    "t": t0,
+                    "kind": "feed",
+                    "text": f"Perfusion started: {feed_vvd[started[0]]:.2f} vvd through "
+                    f"TFF ({100 * perfusion.retention.cell_retention:.0f} % cell retention)",
+                }
+            )
+        bleeding = np.flatnonzero(bleed_vvd > 0)
+        if len(bleeding):
+            events.append(
+                {
+                    "t": float(time[bleeding[0]]),
+                    "kind": "setpoint",
+                    "text": "Bleed opened: VCD controller active",
+                }
+            )
+        events.sort(key=lambda e: e["t"])
     events.append({"t": recipe.runtime, "kind": "end", "text": "Harvest"})
+    controller = perfusion.controller if perfusion is not None else None
+    vcd_setpoint = getattr(controller, "vcd_setpoint", None)
+    passage = perfusion.retention.product_passage if perfusion is not None else 0.0
 
     return {
         "id": spec.run_id,
@@ -391,6 +522,8 @@ def export_run(spec: RunSpec) -> dict:
             else 100 * recipe.do_setpoint,
             "mixing_time_s": round(reactor.mixing_time(recipe.stirring_rate), 1),
             "gas_vvm": round(reactor.gas_flow_per_volume() / 60.0, 4),
+            "mode": "perfusion" if perfusion is not None else "fed-batch",
+            "controller": type(controller).__name__ if controller is not None else None,
         },
         "runtime": recipe.runtime,
         "time": _round(time, 2),
@@ -402,12 +535,16 @@ def export_run(spec: RunSpec) -> dict:
             "gas_o2": _round(100 * true.o2_fraction, 1),
             "pco2": _round(pco2, 1),
             "volume": _round(volume, 4),
+            "feed_vvd": _round(feed_vvd, 3),
+            "bleed_vvd": _round(bleed_vvd, 3),
+            "harvest_vvd": _round(harvest_vvd, 3),
         },
         "sp": {
             "temp": _round(temp_sp, 2),
             "ph": _round(ph_sp, 3),
             "rpm": _round(rpm_sp, 1),
             "do": None if recipe.do_setpoint is None else 100 * recipe.do_setpoint,
+            "vcd": None if vcd_setpoint is None else vcd_setpoint / 1e6,
         },
         "bio": {
             "vcd": _round(true.x_viable / 1e6, 3),
@@ -418,6 +555,9 @@ def export_run(spec: RunSpec) -> dict:
             "nh4": _round(true.c_ammonia, 2),
             "titer": _round(true.c_product * ANTIBODY_MOLAR_MASS, 3),
             "purity": _round(100 * true.purity, 1),
+            # g/L in the harvest stream, and g collected so far
+            "harvest_titer": _round(true.c_product * passage * ANTIBODY_MOLAR_MASS, 3),
+            "harvested_g": _round(true.harvested_product * ANTIBODY_MOLAR_MASS, 2),
         },
         "offline": {
             "t": _round(time[offline], 1),

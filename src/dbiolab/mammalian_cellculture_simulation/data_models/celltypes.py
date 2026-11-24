@@ -41,6 +41,9 @@ class CellType:
         Cell yield from glutamine [cells mmol^-1].
     m_glc : float
         Maintenance coefficient for glucose [mmol cell^-1 h^-1].
+    k_sat_glc_maintenance : float
+        Glucose at which maintenance uptake is halved [mM]; keeps glucose
+        from going negative when it runs out.
     m_gln : float
         Maintenance coefficient for glutamine [mmol cell^-1 h^-1].
     ph_opt : float
@@ -160,6 +163,13 @@ class CellType:
     pco2_crit : float
         CO2 partial pressure at which growth and production are halved
         [mmHg]; both are divided by ``1 + (pCO2 / pco2_crit)^3``.
+    kt_lysed : float
+        Toxicity of lysed cells (debris): adds ``kt_lysed * x_lysed`` to the
+        death rate [mL cell^-1 h^-1] (Richelle et al., 2022: kt).
+    k_i_biomaterial : float
+        Inhibition constant of the biomaterial by-product [a.u.]; growth is
+        divided by ``1 + (biomaterial / k_i_biomaterial)^3`` (Richelle et al.,
+        2022: K_I,Ob).
 
     Notes
     -----
@@ -184,6 +194,7 @@ class CellType:
     y_cells_glc: float
     y_cells_gln: float
     m_glc: float
+    k_sat_glc_maintenance: float
     m_gln: float
     ph_opt: float
     ph_robustness_factor: float
@@ -238,6 +249,8 @@ class CellType:
     t_mix_crit: float
     respiratory_quotient: float
     pco2_crit: float
+    kt_lysed: float
+    k_i_biomaterial: float
 
     @staticmethod
     def from_json(data_path: str) -> "CellType":

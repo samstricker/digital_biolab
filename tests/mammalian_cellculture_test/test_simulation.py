@@ -42,6 +42,7 @@ def test_mammalian_simulation():
         measurement_intervals=2.0,
         noise_parameters=noise_parameters,
         do_setpoint=0.4,
+        perfusion=None,
     )
     solution = simulator.run_experiment(recipe=recipe)
     assert solution is not None
@@ -72,6 +73,7 @@ def _recipe_with_shift(temperature_shift, ph_shift):
         measurement_intervals=2.0,
         noise_parameters=NoiseParameters(),
         do_setpoint=0.4,
+        perfusion=None,
     )
 
 
@@ -170,3 +172,36 @@ def test_mixing_time_falls_with_stirring():
         "tests/mammalian_cellculture_test/resources/MTP_1.json"
     )
     assert reactor.mixing_time(100.0) > reactor.mixing_time(300.0) > 0.0
+
+
+
+def test_glucose_never_goes_negative():
+    # Feeding only glutamine: glucose runs out on day 3 while a dense culture
+    # lives on. Maintenance must stop with the glucose, or glucose goes
+    # negative and the cells keep making lactate from glucose they lack.
+    from dbiolab.mammalian_cellculture_simulation.presets import (
+        bench_perfusion_reactor,
+    )
+
+    def glutamine_feed(time_point):
+        amounts = {key: 0.0 for key in FeedConcentrations.__dataclass_fields__}
+        amounts["c_gln"] = 3.0
+        return FeedingEvent(
+            time_point=time_point,
+            feed_concentrations=FeedConcentrations(**amounts),
+            volume_fraction=3.0 / 200.0,
+        )
+
+    recipe = _recipe_with_shift(36.5, 7.0)
+    recipe.ph_value, recipe.stirring_rate = 7.0, 350.0
+    recipe.temperature = 36.5
+    recipe.initial_conditions.c_glc, recipe.initial_conditions.c_gln = 5.0, 4.0
+    recipe.feeding_strategy = [glutamine_feed(t) for t in (72.0, 144.0, 216.0)]
+    recipe.runtime = 336.0
+    simulator = MammalianCellcultureReactor(reactor_type=bench_perfusion_reactor())
+    true = simulator.simulate(recipe).true
+    assert true.c_glc[-1] < 0.01  # glucose did run out
+    # The growth rate floors glucose at 1e-6 mM, so a trace of uptake remains;
+    # 1e-4 mM is far below any assay's detection limit.
+    assert true.c_glc.min() >= -1e-4
+    assert true.c_gln.min() >= -1e-4

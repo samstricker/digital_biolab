@@ -13,6 +13,9 @@ from .data_models import (
     MeasurementNoise,
     ProcessNoise,
     SimulationResult,
+    ControlAction,
+    PerfusionSettings,
+    RetentionDevice,
 )
 from .cellculture_simulator import MammalianCellcultureReactor
 from .visualization import plot_reaction_evolution_timeseries, plot_setpoints
@@ -36,6 +39,9 @@ __all__ = [
     "MeasurementNoise",
     "ProcessNoise",
     "SimulationResult",
+    "ControlAction",
+    "PerfusionSettings",
+    "RetentionDevice",
     "plot_reaction_evolution_timeseries",
     "plot_setpoints",
     "ReactionEvolutionTimeseries",

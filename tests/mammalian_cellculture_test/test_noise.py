@@ -45,6 +45,7 @@ def make_recipe(noise: NoiseParameters, runtime: float = 200.0) -> MammalianReci
         measurement_intervals=12.0,
         noise_parameters=noise,
         do_setpoint=0.4,
+        perfusion=None,
     )
 
 
